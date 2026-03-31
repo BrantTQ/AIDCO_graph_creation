@@ -1,0 +1,93 @@
+\subsection{Step 7: Decision-Matrix Results}
+\label{sec:step7_decision_matrix_results}
+
+This note summarizes the implemented Step~7 results from the pooled-reference susceptibility workflow. The current run uses the two available representation families:
+\begin{itemize}
+    \item \texttt{name\_only}
+    \item \texttt{concat}, which is the Step~7 label used for the Step~6 \texttt{name\_description} representation
+\end{itemize}
+
+The family \texttt{fusion} is not available in the current pipeline outputs. The pooled-reference usability parameters were fixed \emph{ex ante} at $\lambda_{\min}=0.90$ and $\iota_{\max}=0.10$.
+
+\paragraph{Main pooled-reference result}
+For both available representation families, the admissible-maximizer set was empty under the current usability rule. Consequently, the selected pooled cutoff in each case is the least aggressive susceptibility maximizer rather than the largest admissible maximizer.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Pooled-reference Step~7 decision matrix for the all-tracks graph}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllll}
+\hline
+Criterion & Direction & \texttt{name\_only} & \texttt{concat} & Better family \\
+\hline
+Selected cutoff $\tau^\ast$ & n/a & 0.585136 & 0.519089 & n/a \\
+Selection rule & n/a & least aggressive maximizer & least aggressive maximizer & tie \\
+Retained pooled edges & higher better & 379 & 739 & \texttt{concat} \\
+Connected components & lower better & 438 & 259 & \texttt{concat} \\
+Largest-component share & higher better & 0.0791 & 0.2681 & \texttt{concat} \\
+Isolate share & lower better & 0.4812 & 0.2534 & \texttt{concat} \\
+Connected-node share & higher better & 0.5188 & 0.7466 & \texttt{concat} \\
+Max susceptibility & higher better & 8.6303 & 19.6044 & \texttt{concat} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+The pooled all-tracks graph is fragmented for both families under the current rule, but \texttt{concat} retains substantially more usable structure than \texttt{name\_only}. At the pooled level, \texttt{concat} dominates \texttt{name\_only} on all substantive topological criteria reported above.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Comparison-safe pooled-reference summaries by unit type}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\hline
+Family & Unit type & $n$ graphs & Mean density & Mean LCC share & Mean isolate share & Mean connected share \\
+\hline
+\texttt{name\_only} & \texttt{all\_tracks} & 1 & 0.001364 & 0.079088 & 0.481233 & 0.518767 \\
+\texttt{name\_only} & section & 13 & 0.008771 & 0.126077 & 0.683614 & 0.316386 \\
+\texttt{name\_only} & track & 2 & 0.002140 & 0.061127 & 0.551507 & 0.448493 \\
+\texttt{name\_only} & programme & 14 & 0.014638 & 0.157464 & 0.637584 & 0.362416 \\
+\texttt{name\_only} & \texttt{programme\_year} & 33 & 0.016891 & 0.172514 & 0.703674 & 0.296326 \\
+\texttt{concat} & \texttt{all\_tracks} & 1 & 0.002659 & 0.268097 & 0.253351 & 0.746649 \\
+\texttt{concat} & section & 13 & 0.016973 & 0.230276 & 0.472074 & 0.527926 \\
+\texttt{concat} & track & 2 & 0.004159 & 0.196186 & 0.330775 & 0.669225 \\
+\texttt{concat} & programme & 14 & 0.031873 & 0.274761 & 0.375935 & 0.624065 \\
+\texttt{concat} & \texttt{programme\_year} & 33 & 0.050945 & 0.295730 & 0.443752 & 0.556248 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Across all exported comparison-safe unit types, the pooled-reference sparse graphs are denser and less isolated under \texttt{concat} than under \texttt{name\_only}. The contrast is especially strong for tracks, programmes, and programme-year units.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Local-diagnostic summaries by unit type}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\hline
+Family & Unit type & $n$ graphs & Mean local density & Mean local LCC share & Mean local isolate share & Mean pooled-ref density in unit \\
+\hline
+\texttt{name\_only} & section & 13 & 0.055955 & 0.503787 & 0.138484 & 0.008771 \\
+\texttt{name\_only} & track & 2 & 0.005527 & 0.238120 & 0.319429 & 0.002140 \\
+\texttt{name\_only} & programme & 14 & 0.097655 & 0.518424 & 0.190085 & 0.014638 \\
+\texttt{name\_only} & \texttt{programme\_year} & 33 & 0.129193 & 0.506373 & 0.182349 & 0.016891 \\
+\texttt{concat} & section & 13 & 0.060244 & 0.453927 & 0.136751 & 0.016973 \\
+\texttt{concat} & track & 2 & 0.006774 & 0.306356 & 0.207894 & 0.004159 \\
+\texttt{concat} & programme & 14 & 0.079115 & 0.408992 & 0.212149 & 0.031873 \\
+\texttt{concat} & \texttt{programme\_year} & 33 & 0.129426 & 0.529329 & 0.169554 & 0.050945 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\paragraph{Interpretation}
+The local-diagnostic graphs are materially less fragmented than the pooled-reference induced graphs, which is expected because each local graph receives its own threshold. However, these local graphs are retained only for robustness purposes and are not the comparison-safe basis for downstream analyses.
+
+In substantive terms, the current Step~7 results point in the same direction across the pooled graph and the lower-level summaries: \texttt{concat} preserves more structure, isolates fewer nodes, and yields higher connected-node shares than \texttt{name\_only}. This is not yet the formal Step~8 representation decision, but it is the main empirical signal carried forward from Step~7.

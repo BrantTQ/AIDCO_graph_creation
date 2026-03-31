@@ -1,0 +1,38 @@
+Step 1 deviations and implementation notes
+
+1. Occurrence expansion rule
+The Step 1 instructions said to clarify whether `sections` and `programmes` are scalar values or lists and to explode list fields if needed.
+In the raw JSON, these fields are stored as list-like strings, and 26 records cannot be resolved cleanly by simple section/programme/year list broadcasting.
+To avoid dropping valid records, the clean occurrence table was built from the unique `section + programme` pairs encoded in `chunk_id`, and `year` was assigned from the stable `section + programme -> year` mapping observed in the raw data.
+This is the main methodological deviation from a simpler explode-by-position approach.
+
+2. Duplicate detection scope
+The Step 1 text mentions exact or near-exact duplicate candidates.
+The implemented preprocessing only detects exact occurrence-level duplicates.
+Near-exact duplicate detection was intentionally deferred to Step 2 similarity analysis so preprocessing stays conservative and does not overlap with harmonization.
+
+3. Standardization scope
+The Step 1 text allows standardizing formatting and capitalization when appropriate.
+The implementation uses conservative normalization only:
+- trim leading/trailing whitespace
+- collapse repeated internal whitespace
+- uppercase metadata identifiers such as `sections`, `programmes`, `edu_type`, and `chunk_id`
+It does not automatically rewrite skill-name casing or attempt aggressive text repair, because that would risk introducing semantic edits during preprocessing.
+
+4. Occurrence-level output schema
+The clean occurrence dataset uses singular fields `section`, `programme`, and `year` instead of the raw plural fields.
+The raw list-like source fields are still preserved as `raw_sections`, `raw_programmes`, `raw_year`, and `raw_chunk_id`.
+This is a structural deviation made to ensure the cleaned master table is truly one row per occurrence.
+
+5. Output file structure
+The Step 1 write-up presents some outputs as broad report categories.
+The implementation split these into separate files under `outputs/diagnostics`, including:
+- `01_schema_validation_summary.csv`
+- `01_vector_integrity_summary.csv`
+- `01_coverage_by_curricular_origin.csv`
+This was done to keep each audit table directly reusable in later steps.
+
+6. CSV storage of arrays
+The Step 1 instructions do not specify how vectors and multi-value fields should be stored in CSV.
+In `01_skills_occurrence_clean.csv`, array-valued fields such as vectors and `chunk_ids` are stored as JSON strings.
+The full JSON output keeps them as arrays.

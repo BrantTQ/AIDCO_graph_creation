@@ -1,0 +1,165 @@
+\subsection{Step 5: Definition of the Analytical Units and Construction of the Graph-Ready Node Tables}
+\label{sec:step5_graph_ready_nodes}
+
+After the harmonized dataset has been created in Step~4, the next stage is to define the analytical units on which the graphs will be constructed and to transform the harmonized full dataset into graph-ready node tables. The purpose of this step is not yet to create edges or sparsified graphs, but to establish exactly what a node is in each unit of analysis and to produce one clean node table per unit. This step is therefore the bridge between harmonization and graph construction.
+
+The harmonization in Step~4 was performed globally, using the complete set of unique skills. By contrast, the graphs in the later stages of the project are not built only once for the full dataset. They are built separately for different curricular units. In the present workflow, the analytical units are defined at three levels: sections, tracks, and the pooled dataset. A section-level unit contains all harmonized skill records belonging to one section across the relevant years. A track-level unit contains all harmonized skill records belonging to one education track. The pooled unit contains all harmonized skill records in the full dataset, regardless of section, programme, year, or track.
+
+The first task in this step is therefore to define these analytical units explicitly and to assign each skill record in the harmonized dataset to the relevant unit or units. This assignment must be based on the harmonized full dataset created in Step~4 and must preserve the existing metadata, including at least section, programme, year, and education type. From this point onward, every subsequent graph construction step must use these same unit definitions so that the resulting graphs remain comparable.
+
+The second task is to define the node rule. Within each analytical unit, a node corresponds to one \texttt{harmonized\_skill\_id}. This means that if the same harmonized skill appears multiple times inside the same unit, whether because it occurs in different years, different programmes, or different source records, it is represented by a single node in that unit-level graph. In other words, repeated occurrences of the same harmonized skill inside a unit are collapsed into one node. This is an essential rule because the graph is intended to represent the structure of skills within the curriculum, not the repetition count of identical labels.
+
+The third task is to preserve provenance when repeated occurrences are collapsed. Even though a harmonized skill appears only once as a node within a unit, the aggregated node record must retain the information about where that node came from. This provenance should include the list of contributing \texttt{skill\_id} values, the list of original names, the relevant sections, programmes, years, and education types represented in that node, and the number of source records that were collapsed. This ensures that the graph remains interpretable and that every node can be traced back to the underlying source material.
+
+The fourth task is to define the node-level embedding that will later be used for graph construction. Since the similarity graphs will again be constructed using text embeddings, each node in each analytical unit must be assigned a single vector for the name-only representation and a single vector for the combined name-plus-description representation. When a node is formed from only one harmonized skill record in the unit, the node vector is simply the corresponding skill vector. When a node is formed from multiple contributing records in the same unit, the node vector should be computed as the average of the contributing vectors, followed by normalization. For the name-only representation, this means averaging the relevant \texttt{name\_vector} values. For the combined representation, this means first constructing the combined vector using the same rule adopted in Step~2, then averaging those combined vectors across the contributing records, and finally normalizing the result. The same aggregation rule must be applied consistently to all units.
+
+The output of this step is therefore a set of graph-ready node tables. Each row in these tables corresponds to one harmonized skill node in one analytical unit. These tables do not yet contain edges, similarity matrices, thresholds, or graph objects. Instead, they provide the clean node universe from which the unit-level similarity graphs will be constructed in the next step.
+
+A final methodological principle should be emphasized. Step~5 does not change the harmonized dataset itself. It creates derived node tables for graph construction. The harmonized full dataset created in Step~4 remains unchanged and continues to function as the reference dataset. The graph-ready node tables are therefore analytical products derived from that dataset, not replacements for it.
+
+\subsubsection{Outputs of this Step}
+\label{sec:step5_outputs}
+
+The outputs of Step~5 consist of the formal definition of the analytical units, the graph-ready node tables for each unit family, and summary files describing how the harmonized records were collapsed into nodes.
+
+\paragraph{Files}
+The following core files should be produced at the end of this step:
+\begin{itemize}
+    \item \texttt{05\_analysis\_units\_definition.csv}: formal definition of the analytical units used for graph construction.
+    \item \texttt{05\_graph\_ready\_nodes\_sections.csv}: graph-ready node table for all section-level units.
+    \item \texttt{05\_graph\_ready\_nodes\_tracks.csv}: graph-ready node table for all track-level units.
+    \item \texttt{05\_graph\_ready\_nodes\_pooled.csv}: graph-ready node table for the pooled unit.
+    \item \texttt{05\_node\_aggregation\_summary.csv}: summary of how many harmonized records were collapsed into nodes in each unit.
+    \item \texttt{05\_harmonized\_node\_provenance.csv}: provenance table linking each graph-ready node to its contributing source records.
+\end{itemize}
+
+\paragraph{Tables to Produce}
+The following tables should be generated as part of this step.
+
+\begin{enumerate}
+    \item \textbf{Analytical units definition table.}  
+    This table defines the units on which the graphs will later be constructed.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{unit\_type}
+        \item \texttt{unit\_id}
+        \item \texttt{unit\_label}
+        \item \texttt{definition\_rule}
+        \item \texttt{n\_source\_records}
+        \item \texttt{n\_graph\_nodes}
+    \end{itemize}
+    Typical values of \texttt{unit\_type} should be:
+    \begin{itemize}
+        \item \texttt{section}
+        \item \texttt{track}
+        \item \texttt{pooled}
+    \end{itemize}
+
+    \item \textbf{Graph-ready node table.}  
+    This is the main output of the step. Each row corresponds to one node in one analytical unit.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{unit\_type}
+        \item \texttt{unit\_id}
+        \item \texttt{harmonized\_skill\_id}
+        \item \texttt{harmonized\_name}
+        \item \texttt{node\_name\_vector}
+        \item \texttt{node\_name\_description\_vector}
+        \item \texttt{n\_source\_records}
+        \item \texttt{n\_source\_years}
+        \item \texttt{n\_source\_programmes}
+        \item \texttt{n\_source\_sections}
+        \item \texttt{n\_source\_edu\_types}
+    \end{itemize}
+
+    \item \textbf{Node aggregation summary table.}  
+    This table summarizes how the harmonized full dataset was collapsed into graph-ready nodes for each unit.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{unit\_type}
+        \item \texttt{unit\_id}
+        \item \texttt{n\_source\_records}
+        \item \texttt{n\_harmonized\_skill\_ids}
+        \item \texttt{n\_graph\_nodes}
+        \item \texttt{n\_collapsed\_nodes}
+        \item \texttt{mean\_records\_per\_node}
+    \end{itemize}
+
+    \item \textbf{Node provenance table.}  
+    This table preserves the link between each graph-ready node and its contributing records in the harmonized dataset.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{unit\_type}
+        \item \texttt{unit\_id}
+        \item \texttt{harmonized\_skill\_id}
+        \item \texttt{harmonized\_name}
+        \item \texttt{source\_skill\_ids}
+        \item \texttt{source\_old\_names}
+        \item \texttt{source\_programmes}
+        \item \texttt{source\_sections}
+        \item \texttt{source\_years}
+        \item \texttt{source\_edu\_types}
+    \end{itemize}
+\end{enumerate}
+
+\paragraph{Information That Should Be Recorded}
+At the end of this step, the following information should be known and explicitly documented:
+\begin{itemize}
+    \item the full list of section-level units included in the analysis;
+    \item the full list of track-level units included in the analysis;
+    \item the definition of the pooled unit;
+    \item the rule used to collapse repeated harmonized skills into one node per unit;
+    \item the rule used to compute \texttt{node\_name\_vector};
+    \item the rule used to compute \texttt{node\_name\_description\_vector};
+    \item the number of graph-ready nodes in each section-level unit;
+    \item the number of graph-ready nodes in each track-level unit;
+    \item the number of graph-ready nodes in the pooled unit;
+    \item the number of nodes that aggregate more than one source record within each unit family.
+\end{itemize}
+
+\subsubsection{Fields to Fill After Concluding This Step}
+\label{sec:step5_fields_to_fill}
+
+In most cases, Step~5 should be executable automatically once the harmonized full dataset has been created in Step~4. However, if the unit definition or the node aggregation rule requires an explicit choice, that choice should be recorded before the graph-ready node tables are finalized.
+
+\paragraph{Optional File}
+\texttt{05\_unit\_and\_aggregation\_decisions.csv}
+
+\paragraph{Columns}
+If needed, this file should contain the following columns:
+\begin{itemize}
+    \item \texttt{decision\_id}
+    \item \texttt{issue\_type}
+    \item \texttt{affected\_component}
+    \item \texttt{candidate\_options}
+    \item \texttt{chosen\_option}
+    \item \texttt{rationale}
+\end{itemize}
+
+\paragraph{Typical Cases Requiring Manual Completion}
+The most common cases that may require explicit completion are:
+\begin{itemize}
+    \item deciding whether section-level units are defined only by \texttt{section} or by a combination of \texttt{section} and another metadata field;
+    \item deciding whether track-level units are defined only by \texttt{edu\_type};
+    \item deciding whether node vectors are averaged across all contributing records or across distinct intermediate skill identifiers if such identifiers are preserved;
+    \item deciding whether rare edge cases with incomplete provenance should be retained or excluded from the graph-ready node tables.
+\end{itemize}
+
+\paragraph{Role of This Step in the Workflow}
+This step is the point at which the harmonized full dataset is converted into graph-ready node tables. From this point onward, the subsequent stages of the workflow no longer operate directly on raw or occurrence-level skill records, but on node tables that contain one harmonized skill node per analytical unit. These node tables become the direct input for similarity-based graph construction in the next step.
+
+\subsubsection{Implementation Note and Current Run}
+\label{sec:step5_implementation_note}
+
+The implemented Step~5 produced \texttt{05\_analysis\_units\_definition.csv}, \texttt{05\_unit\_and\_aggregation\_decisions.csv}, \texttt{05\_graph\_ready\_nodes\_sections.csv}, \texttt{05\_graph\_ready\_nodes\_tracks.csv}, \texttt{05\_graph\_ready\_nodes\_pooled.csv}, \texttt{05\_node\_aggregation\_summary.csv}, and \texttt{05\_harmonized\_node\_provenance.csv}. In the current run, the realized unit family consists of 13 section units, 2 track units, and 1 pooled unit, with 949 section-level node rows, 776 track-level node rows, 746 pooled node rows, and 2,471 provenance rows.
+
+The optional decision file was created explicitly and records the substantive choices that were made:
+\begin{itemize}
+    \item section units are defined by \texttt{section} across all years and programmes;
+    \item track units are defined directly by \texttt{edu\_type} values such as \texttt{CLS} and \texttt{GEN};
+    \item node vectors are constructed by averaging normalized occurrence vectors and renormalizing the result.
+\end{itemize}
+
+One practical deviation from the more expansive provenance wish-list is that not every provenance field is repeated in every Step~5 file. The provenance export stores grouped source identifiers, old names, programmes, sections, years, and education types, while occurrence counts are stored in the node tables and the raw \texttt{chunk\_id} remains available in the Step~4 harmonized dataset rather than being duplicated in the compact provenance table.
+
+Because the current Step~4 run contains no reviewed merges, the collapses performed in Step~5 primarily reflect repeated occurrences of the same harmonized label inside a unit rather than reviewed multi-name harmonization groups. In the current run, the pooled unit collapses 1,038 source records into 895 graph nodes.

@@ -1,0 +1,134 @@
+\subsection{Step 3: Construction of the Review Table from the Selected Similarity Cutoffs}
+\label{sec:step3_review_table}
+
+After the global similarity table of unique skills has been generated in Step~2, the next stage is to construct the review table that will be used for manual inspection. The purpose of this step is operational and preparatory. It does not yet perform harmonization, assign canonical names, or modify the original skill records. Instead, it filters the global pairwise similarity table and retains only the unique-skill pairs whose similarity is sufficiently high to justify manual review.
+
+In the revised workflow, Step~2 was applied to a deduplicated global file of unique skills with embeddings. As a consequence, Step~3 also operates at the level of unique skills. Each row in the input similarity table corresponds to one unordered pair of distinct unique skills, together with two cosine similarity measures: one computed using \texttt{name\_vector} only, and the other computed using the combined representation based on \texttt{name\_vector} and \texttt{description\_vector}. This design substantially reduces unnecessary manual work, because identical skill names were already collapsed before similarity estimation.
+
+The filtering rule in this step follows directly from the cutoff values selected at the end of Step~2. A unique-skill pair is retained for manual review whenever its cosine similarity based on \texttt{name\_vector} is greater than or equal to $0.70622$, or its cosine similarity based on the combined name-plus-description representation is greater than or equal to $0.701394$. These two thresholds are treated as alternative entry conditions into the review table. In other words, a pair is kept if it passes at least one of the two cutoffs:
+\[
+\texttt{cosine\_name\_only} \geq 0.70622
+\quad \text{or} \quad
+\texttt{cosine\_name\_description} \geq 0.701394.
+\]
+
+The review table should remain simple and transparent. Each row corresponds to one unique-skill pair that passed the filtering rule. For each retained pair, the table should report the identifiers of the two unique skills, their names, the cosine similarity based on \texttt{name\_vector}, the cosine similarity based on the combined representation, and two logical flags indicating whether the pair passed the name-only cutoff, the combined cutoff, or both. This makes it possible to see immediately which candidate pairs are supported by only one semantic representation and which are supported by both.
+
+The function of this step is to convert the large global similarity table into a manageable candidate file for human judgment. It is therefore a filtering and organization stage rather than a substantive decision stage. No pair is labeled as equivalent or not equivalent at this point. Those decisions are introduced only afterward, during the manual review checkpoint. The output of Step~3 is simply the final table of unique-skill pairs that will be inspected manually.
+
+This step also defines the transition to the harmonization stage. The review decisions collected after this step will be used in the following stage to create a new harmonized dataset containing all skills and their associated information. That new harmonized file must preserve the original extracted skill name and therefore should include a new field such as \texttt{old\_name}, containing the original skill label before harmonization. It should also include a field such as \texttt{harmonized\_name}, containing the final reviewed label, and a logical field such as \texttt{name\_changed}, indicating whether the skill name was modified. In this way, the workflow remains transparent, reversible, and fully traceable.
+
+At the end of this step, the workflow pauses again. The resulting review template is then examined manually, and the reviewer records whether each pair should be considered equivalent, not equivalent, or uncertain. These review decisions will only be used in the next step, when the new harmonized JSON file is constructed.
+
+\subsubsection{Outputs of this Step}
+\label{sec:step3_outputs}
+
+The outputs of Step~3 consist of the filtered review table, a short summary of how many candidate pairs were retained, and an editable review template for manual completion. The harmonized JSON file is \emph{not} produced in this step. It is produced only in the following step, after the manual review has been completed.
+
+\paragraph{Files}
+The following core files should be produced at the end of this step:
+\begin{itemize}
+    \item \texttt{03\_review\_pairs\_unique\_skills.csv}: filtered table containing only the unique-skill pairs that passed at least one of the selected cutoffs.
+    \item \texttt{03\_review\_summary.csv}: summary of the number of candidate pairs retained for manual review.
+    \item \texttt{03\_review\_template\_unique\_skills.csv}: editable version of the filtered review table, with additional empty columns for manual evaluation.
+\end{itemize}
+
+\paragraph{Tables to Produce}
+The following tables should be generated as part of this step.
+
+\begin{enumerate}
+    \item \textbf{Review pairs table.}  
+    This is the main output of the step. Each row corresponds to one unique-skill pair retained for manual inspection.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{pair\_id}
+        \item \texttt{unique\_skill\_id\_1}
+        \item \texttt{unique\_skill\_id\_2}
+        \item \texttt{name\_1}
+        \item \texttt{name\_2}
+        \item \texttt{cosine\_name\_only}
+        \item \texttt{cosine\_name\_description}
+        \item \texttt{pass\_name\_only\_cutoff}
+        \item \texttt{pass\_name\_description\_cutoff}
+    \end{itemize}
+
+    \item \textbf{Review summary table.}  
+    This table summarizes how many candidate pairs were retained under the selected filtering rule.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{summary\_metric}
+        \item \texttt{value}
+    \end{itemize}
+    Typical rows should include:
+    \begin{itemize}
+        \item number of pairs passing the name-only cutoff;
+        \item number of pairs passing the combined cutoff;
+        \item number of pairs passing both cutoffs;
+        \item total number of review pairs.
+    \end{itemize}
+
+    \item \textbf{Manual review template.}  
+    This table is the editable version of the filtered review pairs file and will be completed after this step.  
+    Its columns should be:
+    \begin{itemize}
+        \item \texttt{pair\_id}
+        \item \texttt{unique\_skill\_id\_1}
+        \item \texttt{unique\_skill\_id\_2}
+        \item \texttt{name\_1}
+        \item \texttt{name\_2}
+        \item \texttt{cosine\_name\_only}
+        \item \texttt{cosine\_name\_description}
+        \item \texttt{review\_decision}
+        \item \texttt{review\_notes}
+    \end{itemize}
+\end{enumerate}
+
+\paragraph{Information That Should Be Recorded}
+At the end of this step, the following information should be known and explicitly documented:
+\begin{itemize}
+    \item the cutoff used for the name-only representation, namely $0.70622$;
+    \item the cutoff used for the combined name-plus-description representation, namely $0.701394$;
+    \item the number of pairs passing the name-only cutoff;
+    \item the number of pairs passing the combined cutoff;
+    \item the number of pairs passing both cutoffs;
+    \item the total number of candidate pairs that will be manually reviewed.
+\end{itemize}
+
+\subsubsection{Fields to Fill After Concluding This Step}
+\label{sec:step3_fields_to_fill}
+
+The fields below are not filled during Step~3 itself. They are completed during the manual review checkpoint that follows this step.
+
+\paragraph{File}
+\texttt{03\_review\_template\_unique\_skills.csv}
+
+\paragraph{Columns to Fill During Manual Review}
+The following columns must be completed during the manual evaluation:
+\begin{itemize}
+    \item \texttt{review\_decision}
+    \item \texttt{review\_notes}
+\end{itemize}
+
+\paragraph{Suggested Review Labels}
+A simple and sufficient set of labels for the manual review stage is:
+\begin{itemize}
+    \item \texttt{equivalent}
+    \item \texttt{not\_equivalent}
+    \item \texttt{uncertain}
+\end{itemize}
+
+\paragraph{Link to the Next Step}
+Once the manual review has been completed, the next step will use the reviewed pairs to construct a new harmonized JSON file containing all skills and their associated information. This new file should preserve the original extracted name in a field such as \texttt{old\_name}, store the reviewed harmonized label in a field such as \texttt{harmonized\_name}, and include a logical field such as \texttt{name\_changed}. This ensures that the harmonization process is explicit and that no original information is overwritten.
+
+\subsubsection{Implementation Note and Current Run}
+\label{sec:step3_implementation_note}
+
+The current implementation produced \texttt{03\_review\_pairs\_unique\_skills.csv}, \texttt{03\_review\_summary.csv}, and \texttt{03\_review\_template\_unique\_skills.csv}. In the current run:
+\begin{itemize}
+    \item 144 pairs pass the \texttt{name\_only} cutoff;
+    \item 57 pairs pass the \texttt{name\_description} cutoff;
+    \item 41 pairs pass both cutoffs;
+    \item 160 pairs are retained for review in total.
+\end{itemize}
+
+For the present run, the cutoff itself was treated as the review decision: every retained pair was automatically labeled \texttt{equivalent} in \texttt{03\_review\_template\_unique\_skills.csv} with the note \texttt{automatic\_equivalence\_by\_cutoff}. Step~3 therefore no longer pauses the workflow at a manual-review checkpoint in the current pipeline state.

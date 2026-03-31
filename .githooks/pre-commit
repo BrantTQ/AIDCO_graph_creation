@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+max_bytes=$((50 * 1024 * 1024))
+blocked=0
+
+while IFS= read -r -d '' path; do
+  if [[ ! -f "$path" ]]; then
+    continue
+  fi
+
+  size=$(wc -c <"$path" | tr -d '[:space:]')
+  if [[ "$size" -gt "$max_bytes" ]]; then
+    size_mb=$(awk "BEGIN { printf \"%.2f\", $size / 1024 / 1024 }")
+    echo "Blocked: $path is ${size_mb} MB, which exceeds the 50 MB limit."
+    blocked=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=AM -z)
+
+if [[ "$blocked" -ne 0 ]]; then
+  echo "Commit aborted. Remove the large file, ignore it, or use Git LFS if appropriate."
+  exit 1
+fi

@@ -1,0 +1,28 @@
+# Project data exports
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+
+# Known large JSON artifacts in this project
+/all_tracks_embeddings_enriched.json
+/data_processed/01_skills_occurrence_clean.json
+/data_processed/04_skills_harmonized.json
+
+# Local LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Note:
+# .gitignore can exclude files by name or pattern, but not by size.
+# Use the hook in .githooks/pre-commit to block staged files larger than 50 MB.
