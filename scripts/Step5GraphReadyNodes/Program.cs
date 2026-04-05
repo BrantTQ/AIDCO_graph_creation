@@ -14,6 +14,8 @@ var analysisUnitsDefinitionPath = Path.Combine(unitDefinitionsDirectory, "05_ana
 var decisionsPath = Path.Combine(unitDefinitionsDirectory, "05_unit_and_aggregation_decisions.csv");
 var sectionsNodesPath = Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_sections.csv");
 var tracksNodesPath = Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_tracks.csv");
+var programmesNodesPath = Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_programmes.csv");
+var programmeYearsNodesPath = Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_programme_years.csv");
 var pooledNodesPath = Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_pooled.csv");
 var nodeAggregationSummaryPath = Path.Combine(nodeTablesDirectory, "05_node_aggregation_summary.csv");
 var provenancePath = Path.Combine(nodeTablesDirectory, "05_harmonized_node_provenance.csv");
@@ -39,16 +41,15 @@ if (records.Count == 0)
 
 var preparedRecords = records.Select(PreparedRecord.Create).ToList();
 
-var sectionGroups = preparedRecords
-    .GroupBy(record => RequireNonEmpty(record.Source.section, "section"))
-    .OrderBy(group => group.Key, StringComparer.Ordinal)
-    .Select(group => CreateUnitContext(
-        unitType: "section",
-        unitId: group.Key,
-        unitLabel: group.Key,
-        definitionRule: $"All harmonized skill records with section == {group.Key} across all years and programmes.",
-        records: group.ToList()))
-    .ToList();
+var pooledGroups = new[]
+{
+    CreateUnitContext(
+        unitType: "pooled",
+        unitId: "POOLED_ALL",
+        unitLabel: "Pooled all-skills unit",
+        definitionRule: "All harmonized skill records in the full harmonized dataset.",
+        records: preparedRecords)
+};
 
 var trackGroups = preparedRecords
     .GroupBy(record => RequireNonEmpty(record.Source.edu_type, "edu_type"))
@@ -61,37 +62,74 @@ var trackGroups = preparedRecords
         records: group.ToList()))
     .ToList();
 
-var pooledGroup = new[]
-{
-    CreateUnitContext(
-        unitType: "pooled",
-        unitId: "POOLED_ALL",
-        unitLabel: "Pooled all-skills unit",
-        definitionRule: "All harmonized skill records in the full harmonized dataset.",
-        records: preparedRecords)
-};
+var sectionGroups = preparedRecords
+    .GroupBy(record => RequireNonEmpty(record.Source.section, "section"))
+    .OrderBy(group => group.Key, StringComparer.Ordinal)
+    .Select(group => CreateUnitContext(
+        unitType: "section",
+        unitId: group.Key,
+        unitLabel: group.Key,
+        definitionRule: $"All harmonized skill records with section == {group.Key} across all years and programmes.",
+        records: group.ToList()))
+    .ToList();
 
-var sectionResult = BuildUnitFamily(sectionGroups);
+var programmeGroups = preparedRecords
+    .GroupBy(record => RequireNonEmpty(record.Source.programme, "programme"))
+    .OrderBy(group => group.Key, StringComparer.Ordinal)
+    .Select(group => CreateUnitContext(
+        unitType: "programme",
+        unitId: group.Key,
+        unitLabel: group.Key,
+        definitionRule: $"All harmonized skill records with programme == {group.Key} across all sections and years.",
+        records: group.ToList()))
+    .ToList();
+
+var programmeYearGroups = preparedRecords
+    .GroupBy(record => $"{RequireNonEmpty(record.Source.programme, "programme")}__{RequireNonEmpty(record.Source.year, "year")}")
+    .OrderBy(group => group.Key, StringComparer.Ordinal)
+    .Select(group =>
+    {
+        var first = group.First();
+        var programme = RequireNonEmpty(first.Source.programme, "programme");
+        var year = RequireNonEmpty(first.Source.year, "year");
+        return CreateUnitContext(
+            unitType: "programme_year",
+            unitId: $"{programme}__{year}",
+            unitLabel: $"{programme} year {year}",
+            definitionRule: $"All harmonized skill records with programme == {programme} and year == {year}.",
+            records: group.ToList());
+    })
+    .ToList();
+
+var pooledResult = BuildUnitFamily(pooledGroups);
 var trackResult = BuildUnitFamily(trackGroups);
-var pooledResult = BuildUnitFamily(pooledGroup);
+var sectionResult = BuildUnitFamily(sectionGroups);
+var programmeResult = BuildUnitFamily(programmeGroups);
+var programmeYearResult = BuildUnitFamily(programmeYearGroups);
 
-var allAnalysisUnits = sectionResult.AnalysisUnits
+var allAnalysisUnits = pooledResult.AnalysisUnits
     .Concat(trackResult.AnalysisUnits)
-    .Concat(pooledResult.AnalysisUnits)
+    .Concat(sectionResult.AnalysisUnits)
+    .Concat(programmeResult.AnalysisUnits)
+    .Concat(programmeYearResult.AnalysisUnits)
     .OrderBy(unit => GetUnitTypeSortOrder(unit.unit_type))
     .ThenBy(unit => unit.unit_id, StringComparer.Ordinal)
     .ToList();
 
-var allNodeSummaries = sectionResult.NodeAggregationSummaries
+var allNodeSummaries = pooledResult.NodeAggregationSummaries
     .Concat(trackResult.NodeAggregationSummaries)
-    .Concat(pooledResult.NodeAggregationSummaries)
+    .Concat(sectionResult.NodeAggregationSummaries)
+    .Concat(programmeResult.NodeAggregationSummaries)
+    .Concat(programmeYearResult.NodeAggregationSummaries)
     .OrderBy(summary => GetUnitTypeSortOrder(summary.unit_type))
     .ThenBy(summary => summary.unit_id, StringComparer.Ordinal)
     .ToList();
 
-var allProvenanceRows = sectionResult.ProvenanceRows
+var allProvenanceRows = pooledResult.ProvenanceRows
     .Concat(trackResult.ProvenanceRows)
-    .Concat(pooledResult.ProvenanceRows)
+    .Concat(sectionResult.ProvenanceRows)
+    .Concat(programmeResult.ProvenanceRows)
+    .Concat(programmeYearResult.ProvenanceRows)
     .OrderBy(row => GetUnitTypeSortOrder(row.unit_type))
     .ThenBy(row => row.unit_id, StringComparer.Ordinal)
     .ThenBy(row => row.harmonized_skill_id, StringComparer.Ordinal)
@@ -102,41 +140,68 @@ var decisions = new List<UnitDecision>
     new(
         decision_id: "DEC_001",
         issue_type: "unit_definition",
-        affected_component: "section_units",
-        candidate_options: "section only; section x year; section x programme",
-        chosen_option: "section only",
-        rationale: "Step 5 defines a section-level unit as all harmonized skill records belonging to one section across the relevant years."),
+        affected_component: "pooled_units",
+        candidate_options: "single pooled unit; track-specific pooled units",
+        chosen_option: "single pooled unit",
+        rationale: "The pooled unit is the full harmonized dataset and serves as the most aggregated observational layer."),
     new(
         decision_id: "DEC_002",
         issue_type: "unit_definition",
         affected_component: "track_units",
         candidate_options: "edu_type only; edu_type x year",
         chosen_option: "edu_type only",
-        rationale: "Step 5 defines a track-level unit as all harmonized skill records belonging to one education track."),
+        rationale: "Track units summarize each education track across the available sections, programmes, and years."),
     new(
         decision_id: "DEC_003",
+        issue_type: "unit_definition",
+        affected_component: "section_units",
+        candidate_options: "section only; section x year; section x programme",
+        chosen_option: "section only",
+        rationale: "Section units keep the disciplinary layer stable across years and programmes."),
+    new(
+        decision_id: "DEC_004",
+        issue_type: "unit_definition",
+        affected_component: "programme_units",
+        candidate_options: "programme only; programme x section",
+        chosen_option: "programme only",
+        rationale: "Programmes are analyzed as full curricula across their sections and years."),
+    new(
+        decision_id: "DEC_005",
+        issue_type: "unit_definition",
+        affected_component: "programme_year_units",
+        candidate_options: "programme x year; programme x year x section",
+        chosen_option: "programme x year",
+        rationale: "Programme-year is the progression-sensitive unit and is frozen explicitly in Step 5."),
+    new(
+        decision_id: "DEC_006",
         issue_type: "node_aggregation",
         affected_component: "node_vectors",
         candidate_options: "average raw occurrence vectors; average normalized occurrence vectors and renormalize",
         chosen_option: "average normalized occurrence vectors and renormalize",
-        rationale: "This matches the workflow guidance for unit-specific node embeddings and keeps aggregation comparable across units.")
+        rationale: "This keeps node construction fixed across all unit levels and both semantic representations.")
 };
 
 WriteCsv(analysisUnitsDefinitionPath, allAnalysisUnits);
 WriteCsv(decisionsPath, decisions);
 WriteCsv(sectionsNodesPath, sectionResult.NodeRows);
 WriteCsv(tracksNodesPath, trackResult.NodeRows);
+WriteCsv(programmesNodesPath, programmeResult.NodeRows);
+WriteCsv(programmeYearsNodesPath, programmeYearResult.NodeRows);
 WriteCsv(pooledNodesPath, pooledResult.NodeRows);
 WriteCsv(nodeAggregationSummaryPath, allNodeSummaries);
 WriteCsv(provenancePath, allProvenanceRows);
 
 Console.WriteLine($"Loaded harmonized records: {preparedRecords.Count}");
-Console.WriteLine($"Section units: {sectionGroups.Count}");
+Console.WriteLine($"Pooled units: {pooledGroups.Length}");
 Console.WriteLine($"Track units: {trackGroups.Count}");
-Console.WriteLine($"Pooled units: {pooledGroup.Length}");
-Console.WriteLine($"Section nodes written: {sectionResult.NodeRows.Count}");
-Console.WriteLine($"Track nodes written: {trackResult.NodeRows.Count}");
+Console.WriteLine($"Section units: {sectionGroups.Count}");
+Console.WriteLine($"Programme units: {programmeGroups.Count}");
+Console.WriteLine($"Programme-year units: {programmeYearGroups.Count}");
 Console.WriteLine($"Pooled nodes written: {pooledResult.NodeRows.Count}");
+Console.WriteLine($"Track nodes written: {trackResult.NodeRows.Count}");
+Console.WriteLine($"Section nodes written: {sectionResult.NodeRows.Count}");
+Console.WriteLine($"Programme nodes written: {programmeResult.NodeRows.Count}");
+Console.WriteLine($"Programme-year nodes written: {programmeYearResult.NodeRows.Count}");
 
 static string RequireNonEmpty(string? value, string fieldName)
 {
@@ -157,9 +222,11 @@ static string GetTrackLabel(string trackId) => trackId switch
 
 static int GetUnitTypeSortOrder(string unitType) => unitType switch
 {
-    "section" => 1,
+    "pooled" => 1,
     "track" => 2,
-    "pooled" => 3,
+    "section" => 3,
+    "programme" => 4,
+    "programme_year" => 5,
     _ => 99
 };
 
@@ -201,6 +268,12 @@ static UnitFamilyResult BuildUnitFamily(IEnumerable<UnitContext> units)
 
             var sourceSkillIds = orderedRecords
                 .Select(record => RequireNonEmpty(record.Source.skill_id, "skill_id"))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToList();
+
+            var sourceTextInstanceIds = orderedRecords
+                .Select(record => RequireNonEmpty(record.Source.text_instance_id, "text_instance_id"))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(value => value, StringComparer.Ordinal)
                 .ToList();
@@ -257,6 +330,7 @@ static UnitFamilyResult BuildUnitFamily(IEnumerable<UnitContext> units)
                 harmonized_skill_id: nodeGroup.Key,
                 harmonized_name: harmonizedName,
                 source_skill_ids: SerializeStringList(sourceSkillIds),
+                source_text_instance_ids: SerializeStringList(sourceTextInstanceIds),
                 source_old_names: SerializeStringList(sourceOldNames),
                 source_programmes: SerializeStringList(sourceProgrammes),
                 source_sections: SerializeStringList(sourceSections),
@@ -417,6 +491,7 @@ sealed class HarmonizedRecord
 {
     public string occurrence_id { get; set; } = string.Empty;
     public string skill_id { get; set; } = string.Empty;
+    public string text_instance_id { get; set; } = string.Empty;
     public string old_name { get; set; } = string.Empty;
     public string harmonized_name { get; set; } = string.Empty;
     public string harmonized_skill_id { get; set; } = string.Empty;
@@ -523,6 +598,7 @@ sealed record ProvenanceRow(
     string harmonized_skill_id,
     string harmonized_name,
     string source_skill_ids,
+    string source_text_instance_ids,
     string source_old_names,
     string source_programmes,
     string source_sections,

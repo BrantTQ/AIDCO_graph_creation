@@ -1,149 +1,46 @@
-\subsection{Step 6: Construction of Full Weighted Similarity Graphs}
+\subsection{Step 6: Full Weighted Graph Construction}
 \label{sec:step6_weighted_graphs}
 
-After the graph-ready node tables have been created in Step~5, the next stage is to compute the full pairwise similarity structure within each analytical unit. No sparsification, thresholding, or topological pruning is applied yet. The purpose of this step is to construct the complete weighted graph family that will later serve as the basis for graph-level cutoff selection and comparison across units.
+Step~6 converts each Step~5 node table into a full weighted graph under both semantic representations. This step is mechanical but important: it freezes the common weighted candidate graph family from which later sparsification and selection are derived.
 
-The direct inputs to this step are:
+For every analytical unit, Step~6 computes cosine similarity between all unordered node pairs under:
 \begin{itemize}
-    \item \texttt{05\_graph\_ready\_nodes\_sections.csv}
-    \item \texttt{05\_graph\_ready\_nodes\_tracks.csv}
-    \item \texttt{05\_graph\_ready\_nodes\_pooled.csv}
+    \item \texttt{name\_only}, using \texttt{node\_name\_vector};
+    \item \texttt{name\_description}, using \texttt{node\_name\_description\_vector}.
 \end{itemize}
 
-Each node table contains two vector representations:
-\begin{itemize}
-    \item \texttt{node\_name\_vector}
-    \item \texttt{node\_name\_description\_vector}
-\end{itemize}
-These are the vectors used to compute graph edge weights.
-
-For each analytical unit, Step~6 constructs two weighted similarity representations:
-\begin{enumerate}
-    \item a graph based on \texttt{node\_name\_vector};
-    \item a graph based on \texttt{node\_name\_description\_vector}.
-\end{enumerate}
-Within a given unit and representation, cosine similarity is computed for all node pairs. The graph is undirected, so each unordered pair of distinct nodes corresponds to exactly one edge in the full weighted graph. No threshold is imposed at this stage.
-
-The current implementation stores this graph family in two complementary tabular forms. First, it writes long-format similarity matrices that retain all ordered row-column combinations, including diagonal self-similarities. Second, it writes full edge lists that retain all unordered node pairs with their cosine weights. Separate summary and metadata tables are then written so that graph size, file location, and similarity distributions can be compared across all units and representations without reopening the full matrices.
+The corrected workflow now makes this graph family explicit for all five aggregation levels: pooled, track, section, programme, and programme-year. The weighted edges are stored in long format together with summary metadata so that later steps can reuse the same frozen weighted universe regardless of the eventual sparsification decision.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step6_outputs}
 
-\paragraph{Files}
-The following core files should be produced at the end of this step:
+The corrected Step~6 produces:
 \begin{itemize}
-    \item \texttt{06\_similarity\_matrices\_sections.csv}
-    \item \texttt{06\_similarity\_matrices\_tracks.csv}
     \item \texttt{06\_similarity\_matrices\_pooled.csv}
-    \item \texttt{06\_weighted\_edges\_sections.csv}
-    \item \texttt{06\_weighted\_edges\_tracks.csv}
+    \item \texttt{06\_similarity\_matrices\_tracks.csv}
+    \item \texttt{06\_similarity\_matrices\_sections.csv}
+    \item \texttt{06\_similarity\_matrices\_programmes.csv}
+    \item \texttt{06\_similarity\_matrices\_programme\_years.csv}
     \item \texttt{06\_weighted\_edges\_pooled.csv}
+    \item \texttt{06\_weighted\_edges\_tracks.csv}
+    \item \texttt{06\_weighted\_edges\_sections.csv}
+    \item \texttt{06\_weighted\_edges\_programmes.csv}
+    \item \texttt{06\_weighted\_edges\_programme\_years.csv}
     \item \texttt{06\_weighted\_graph\_summary.csv}
     \item \texttt{06\_weighted\_graph\_metadata.csv}
     \item \texttt{06\_graph\_storage\_decisions.csv}
 \end{itemize}
 
-\paragraph{Tables to Produce}
-The following tables should be generated as part of this step.
-
-\begin{enumerate}
-    \item \textbf{Long-format similarity matrix table.}  
-    This table records the full within-unit cosine similarity matrix, including diagonal entries.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{unit\_type}
-        \item \texttt{unit\_id}
-        \item \texttt{representation}
-        \item \texttt{node\_id\_row}
-        \item \texttt{node\_id\_col}
-        \item \texttt{similarity\_value}
-    \end{itemize}
-
-    \item \textbf{Dense weighted edge list.}  
-    This table records every unordered pair of distinct nodes within a unit and representation.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{unit\_type}
-        \item \texttt{unit\_id}
-        \item \texttt{representation}
-        \item \texttt{harmonized\_skill\_id\_1}
-        \item \texttt{harmonized\_skill\_id\_2}
-        \item \texttt{harmonized\_name\_1}
-        \item \texttt{harmonized\_name\_2}
-        \item \texttt{edge\_weight}
-    \end{itemize}
-
-    \item \textbf{Weighted graph summary table.}  
-    This table summarizes the distribution of edge weights for each unit and representation.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{unit\_type}
-        \item \texttt{unit\_id}
-        \item \texttt{representation}
-        \item \texttt{n\_nodes}
-        \item \texttt{n\_possible\_edges}
-        \item \texttt{edge\_weight\_min}
-        \item \texttt{edge\_weight\_mean}
-        \item \texttt{edge\_weight\_median}
-        \item \texttt{edge\_weight\_std}
-        \item \texttt{edge\_weight\_p75}
-        \item \texttt{edge\_weight\_p90}
-        \item \texttt{edge\_weight\_p95}
-        \item \texttt{edge\_weight\_max}
-    \end{itemize}
-
-    \item \textbf{Weighted graph metadata table.}  
-    This table records the identifying and storage metadata for every graph in the family.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{graph\_id}
-        \item \texttt{unit\_type}
-        \item \texttt{unit\_id}
-        \item \texttt{representation}
-        \item \texttt{n\_nodes}
-        \item \texttt{n\_possible\_edges}
-        \item \texttt{matrix\_file}
-        \item \texttt{edge\_file}
-        \item \texttt{notes}
-    \end{itemize}
-\end{enumerate}
-
-\paragraph{Information That Should Be Recorded}
-At the end of this step, the following information should be known and explicitly documented:
-\begin{itemize}
-    \item the number of graphs created for section, track, and pooled units;
-    \item the number of nodes in each graph;
-    \item the number of possible undirected edges in each graph;
-    \item the distribution of edge weights in each graph under both representations;
-    \item the storage format used for the similarity matrices;
-    \item the storage format used for the edge lists;
-    \item whether diagonal self-similarities are retained in the matrix exports;
-    \item whether all unordered node pairs are retained in the dense edge lists;
-    \item the file locations of the matrix and edge exports for each graph.
-\end{itemize}
-
-\subsubsection{Fields to Fill After Concluding This Step}
-\label{sec:step6_fields_to_fill}
-
-Step~6 should generally be executable automatically once the Step~5 node tables exist. If the project requires an explicit written record of graph-storage choices, those decisions should be captured in \texttt{06\_graph\_storage\_decisions.csv}.
-
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step6_implementation_note}
 
-The current implementation produced all nine files listed above. The dense graph family is represented by the combination of long-format similarity matrices, dense unordered edge lists, graph summaries, graph metadata, and \texttt{06\_graph\_storage\_decisions.csv}. No separate serialized graph-object file is written in the current workflow; this is the main practical deviation from a more abstract formulation that would refer to a separate graph-object export.
-
-The current run produced 32 graph summaries in total:
+The current corrected run built weighted graphs for:
 \begin{itemize}
-    \item 26 section graphs;
-    \item 4 track graphs;
-    \item 2 pooled graphs.
+    \item 1 pooled unit;
+    \item 2 track units;
+    \item 13 section units;
+    \item 14 programme units;
+    \item 33 programme-year units.
 \end{itemize}
 
-The recorded storage decisions are:
-\begin{itemize}
-    \item long-format similarity matrices are used instead of wide matrices;
-    \item dense edge lists retain all unordered node pairs, including negative cosine similarities;
-    \item graph metadata are stored in a separate file rather than embedded in each edge export.
-\end{itemize}
-
-An important current-state note is that Step~6 has been run on node tables built from the active Step~4 harmonization layer in which all cutoff-retained Step~3 pairs were merged automatically. The resulting full weighted graphs therefore reflect the current post-harmonization state of the workflow rather than the earlier no-merge baseline.
+Across the two semantic representations, this yields 126 weighted graphs in total. The pooled weighted graphs are built on 895 nodes and 400,065 unordered edges per representation. All later sparsification decisions in Step~7 operate on this frozen weighted family.

@@ -1,193 +1,57 @@
-\subsection{Step 4: Harmonization of Skill Names and Construction of the New Harmonized Dataset}
+\subsection{Step 4: Harmonization Dataset Construction}
 \label{sec:step4_harmonization_dataset}
 
-After the manual review of the filtered unique-skill pairs has been completed, the next step is to transform those review decisions into a harmonized skill naming layer and to propagate that layer back to the full skill dataset. This is the first stage at which the skill names are actually harmonized. The purpose of this step is therefore twofold. First, it converts the reviewed equivalence decisions into a harmonization mapping over the list of unique skills. Second, it uses that mapping to create a new JSON file containing all skills and their original information, together with additional fields that record the original name and the reviewed harmonized name.
+Step~4 transforms reviewed equivalence decisions into a harmonization map that can be propagated back to the full occurrence-level dataset. In the corrected workflow, this step is deliberately conservative: only pairs explicitly marked \texttt{equivalent} in Step~3 are allowed to create harmonized groups. Pairs marked \texttt{not\_equivalent} or \texttt{uncertain}, as well as pairs with blank review fields, do not create merges.
 
-The input for this step is the manually completed review file produced after Step~3. In that file, each retained unique-skill pair has been labeled as \texttt{equivalent}, \texttt{not\_equivalent}, or \texttt{uncertain}. Only the pairs labeled \texttt{equivalent} are used to construct harmonized groups. Pairs labeled \texttt{not\_equivalent} are treated as evidence that the two unique skills must remain separate. Pairs labeled \texttt{uncertain} are not automatically merged and should remain separate unless an explicit additional decision is made outside the pairwise review file.
+The grouping rule is connected-component closure over the reviewed positive-pair graph. Because chain merges can over-collapse the node universe when the review edges are noisy, Step~4 now exports an explicit component audit so that multi-name or multi-member groups can be checked before the harmonization layer is treated as frozen. Representative harmonized names are selected transparently by the rule ``most frequent label, then lexicographic tie-break,'' with optional manual overrides recorded separately.
 
-The first task in this step is to create equivalence groups among unique skills. Each unique skill is treated as a node, and each reviewed pair labeled \texttt{equivalent} is treated as an undirected connection between two nodes. The connected components of this reviewed equivalence graph define the preliminary harmonized groups. In practical terms, this means that if unique skill $A$ was judged equivalent to $B$, and $B$ equivalent to $C$, then all three unique skills are placed in the same harmonized group, unless an explicit manual exception is introduced. Each harmonized group is then assigned a new identifier, such as \texttt{harmonized\_skill\_id}.
-
-The second task is to assign one harmonized name to each harmonized group. This is the substantive naming step of the workflow. For groups containing only one unique skill, the harmonized name is simply the original unique skill name. For groups containing more than one reviewed-equivalent unique skill, one harmonized label must be selected and assigned to the whole group. This harmonized label should be chosen in a clear and consistent manner. A practical and transparent rule is to select one representative name for the whole group and record that name explicitly in the harmonization mapping. Regardless of the naming rule adopted, it is essential that the original unique skill names remain preserved and are not overwritten without trace.
-
-The third task is to construct the unique-skill harmonization mapping. This mapping is the bridge between the reviewed pairwise decisions and the full skill dataset. For every unique skill in the deduplicated global list, the mapping should record its original name, its harmonized group identifier, its harmonized name, and whether the name changed as a result of harmonization. This ensures that the harmonization logic remains explicit and can be audited independently of the full dataset.
-
-The fourth task is to propagate the harmonization mapping back to the full skill file. At this point, the project returns from the unique-skill level to the complete dataset containing all skill records and their associated metadata. A new harmonized dataset must then be created. This new dataset should preserve all original fields already present in the skill records, including identifiers, descriptions, sections, programmes, year, education type, chunk information, and embeddings. In addition, the new dataset should include a field such as \texttt{old\_name}, containing the original extracted skill name, a field such as \texttt{harmonized\_name}, containing the final harmonized label assigned after review, and a logical field such as \texttt{name\_changed}, indicating whether the name differs from the original. It is also strongly advisable to include \texttt{harmonized\_skill\_id} as a stable identifier for the harmonized skill group.
-
-The resulting harmonized dataset is therefore not a replacement of the original data, but a new derived file. This distinction is methodologically important. The raw or cleaned dataset remains intact, while the harmonized dataset becomes the version used in all subsequent steps of the project. In this way, the workflow remains reproducible, reversible, and fully documented. The harmonization can always be traced back to the reviewed pairwise decisions and to the original skill names.
-
-The fifth task is to produce summary diagnostics for the harmonization stage. These diagnostics should report how many unique skills were merged into multi-name harmonized groups, how many unique skills remained unchanged, how many original skill records received a changed harmonized label, and how many harmonized groups were ultimately created. Such summary information is important because it quantifies the scale of the harmonization process before the graph construction stages begin.
-
-At the end of this step, the project has a new harmonized JSON file that contains all skills and all original associated information, plus the new harmonization fields. This harmonized dataset becomes the main input for the subsequent stages of the workflow, including the definition of analytical units and the construction of similarity-based graphs.
+If Step~3 has not yet been reviewed, Step~4 remains valid but yields a no-merge baseline. This is the current pipeline state.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step4_outputs}
 
-The outputs of Step~4 consist of the harmonization mapping at the unique-skill level, the new harmonized dataset at the full skill level, and a set of summary files documenting the effect of the harmonization procedure.
-
-\paragraph{Files}
-The following core files should be produced at the end of this step:
+The corrected Step~4 produces:
 \begin{itemize}
-    \item \texttt{04\_unique\_skills\_harmonization\_mapping.csv}: mapping from each unique skill to its harmonized group and harmonized name.
-    \item \texttt{04\_unique\_skills\_harmonized.csv}: unique-skill-level table after harmonization.
-    \item \texttt{04\_skills\_harmonized.json}: new full JSON file containing all skills and their original information, augmented with the harmonization fields.
-    \item \texttt{04\_skills\_harmonized.csv}: tabular version of the full harmonized skill dataset.
-    \item \texttt{04\_harmonization\_summary.csv}: summary of how many skills were merged, unchanged, or renamed.
-    \item \texttt{04\_harmonized\_groups\_summary.csv}: one-row-per-harmonized-group summary table.
+    \item \texttt{04\_textual\_instances\_harmonization\_mapping.csv}
+    \item \texttt{04\_textual\_instances\_harmonized.csv}
+    \item \texttt{04\_skills\_harmonized.json}
+    \item \texttt{04\_skills\_harmonized.csv}
+    \item \texttt{04\_unique\_skills\_harmonization\_mapping.csv}
+    \item \texttt{04\_unique\_skills\_harmonized.csv}
+    \item \texttt{04\_harmonization\_summary.csv}
+    \item \texttt{04\_harmonized\_groups\_summary.csv}
+    \item \texttt{04\_harmonized\_name\_selection.csv}
+    \item \texttt{04\_component\_merge\_audit.csv}
 \end{itemize}
 
-\paragraph{Tables to Produce}
-The following tables should be generated as part of this step.
-
-\begin{enumerate}
-    \item \textbf{Unique-skill harmonization mapping table.}  
-    This is the main mapping table created from the reviewed decisions. Each row corresponds to one unique skill.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{unique\_skill\_id}
-        \item \texttt{old\_name}
-        \item \texttt{harmonized\_skill\_id}
-        \item \texttt{harmonized\_name}
-        \item \texttt{name\_changed}
-        \item \texttt{harmonization\_status}
-    \end{itemize}
-
-    \item \textbf{Full harmonized skill table.}  
-    This table is the harmonized version of the full skill dataset and contains all original skill information plus the new harmonization fields.  
-    Its columns should include all original fields from the cleaned skill dataset, plus:
-    \begin{itemize}
-        \item \texttt{old\_name}
-        \item \texttt{harmonized\_name}
-        \item \texttt{name\_changed}
-        \item \texttt{harmonized\_skill\_id}
-    \end{itemize}
-    In the implemented workflow, the cleaned occurrence-level dataset already contains resolved occurrence identifiers and singular curricular fields. The full harmonized table should therefore retain the cleaned occurrence fields, notably:
-    \begin{itemize}
-        \item \texttt{occurrence\_id}
-        \item \texttt{source\_record\_index}
-        \item \texttt{occurrence\_index\_within\_record}
-        \item \texttt{skill\_id}
-        \item \texttt{name}
-        \item \texttt{old\_name}
-        \item \texttt{harmonized\_name}
-        \item \texttt{name\_changed}
-        \item \texttt{harmonized\_skill\_id}
-        \item \texttt{description}
-        \item \texttt{section}
-        \item \texttt{programme}
-        \item \texttt{year}
-        \item \texttt{edu\_type}
-        \item \texttt{chunk\_ids}
-        \item \texttt{chunk\_id\_count}
-        \item \texttt{provenance\_resolution\_method}
-        \item \texttt{name\_vector\_dimension}
-        \item \texttt{description\_vector\_dimension}
-        \item \texttt{name\_vector}
-        \item \texttt{description\_vector}
-        \item \texttt{raw\_name}
-        \item \texttt{raw\_description}
-        \item \texttt{raw\_sections}
-        \item \texttt{raw\_programmes}
-        \item \texttt{raw\_year}
-        \item \texttt{raw\_edu\_type}
-        \item \texttt{raw\_chunk\_id}
-    \end{itemize}
-
-    \item \textbf{Harmonization summary table.}  
-    This table summarizes the overall effect of the harmonization step.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{summary\_metric}
-        \item \texttt{value}
-    \end{itemize}
-    Typical rows should include:
-    \begin{itemize}
-        \item number of reviewed pairs labeled \texttt{equivalent};
-        \item number of unique skills;
-        \item number of harmonized groups;
-        \item number of multi-name harmonized groups;
-        \item number of unique skills whose harmonized name differs from the original name;
-        \item number of full skill records with \texttt{name\_changed = TRUE}.
-    \end{itemize}
-
-    \item \textbf{Harmonized groups summary table.}  
-    This table provides one row per harmonized group.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{harmonized\_skill\_id}
-        \item \texttt{harmonized\_name}
-        \item \texttt{n\_unique\_skills}
-        \item \texttt{member\_unique\_skill\_ids}
-        \item \texttt{member\_old\_names}
-    \end{itemize}
-\end{enumerate}
-
-\paragraph{Information That Should Be Recorded}
-At the end of this step, the following information should be known and explicitly documented:
-\begin{itemize}
-    \item the number of reviewed pairs labeled \texttt{equivalent};
-    \item the number of reviewed pairs labeled \texttt{not\_equivalent};
-    \item the number of reviewed pairs labeled \texttt{uncertain};
-    \item the total number of unique skills before harmonization;
-    \item the total number of harmonized groups after harmonization;
-    \item the number of harmonized groups containing more than one unique skill;
-    \item the number of unique skills whose harmonized name differs from the original name;
-    \item the number of full skill records whose \texttt{harmonized\_name} differs from \texttt{old\_name};
-    \item the location and name of the new harmonized JSON file.
-\end{itemize}
+The textual-instance mapping is the main harmonization file for downstream steps. The unique-skill summary files are retained as derived convenience outputs, but the harmonization logic itself is defined at the textual-instance level.
 
 \subsubsection{Fields to Fill After Concluding This Step}
 \label{sec:step4_fields_to_fill}
 
-In most cases, Step~4 should be executable automatically once the manual review file has been completed. However, if a harmonized group contains several different original names, one representative label must be selected as the final harmonized name. If this choice cannot be determined automatically, it should be recorded explicitly before the final harmonized dataset is generated.
-
-\paragraph{Optional File}
-\texttt{04\_harmonized\_name\_selection.csv}
-
-\paragraph{Columns}
-If needed, this file should contain the following columns:
+No new fields are meant to be filled inside Step~4 itself. The substantive prerequisite is still upstream:
 \begin{itemize}
-    \item \texttt{harmonized\_skill\_id}
-    \item \texttt{candidate\_names}
-    \item \texttt{chosen\_harmonized\_name}
-    \item \texttt{selection\_rationale}
+    \item complete the Step~3 review fields \texttt{review\_decision} and \texttt{review\_notes} in
+    \texttt{03\_review\_template\_textual\_instances.csv}
 \end{itemize}
 
-\paragraph{Typical Cases Requiring Manual Completion}
-The most common cases that may require explicit completion are:
-\begin{itemize}
-    \item a harmonized group contains several different reviewed-equivalent names and one representative name must be chosen;
-    \item an \texttt{uncertain} pair affects whether two provisional groups should remain separated or not;
-    \item a naming convention must be standardized across several groups before writing the final harmonized JSON file.
-\end{itemize}
-
-\paragraph{Main New Fields Introduced in the Harmonized Dataset}
-The new harmonized dataset created in this step must include at least the following additional fields:
-\begin{itemize}
-    \item \texttt{old\_name}: the original extracted skill name before harmonization;
-    \item \texttt{harmonized\_name}: the final reviewed skill label after harmonization;
-    \item \texttt{name\_changed}: logical field indicating whether \texttt{old\_name} and \texttt{harmonized\_name} differ;
-    \item \texttt{harmonized\_skill\_id}: identifier of the harmonized skill group.
-\end{itemize}
-
-\paragraph{Role of This Step in the Workflow}
-This step is the point at which the reviewed equivalence decisions are converted into a new harmonized JSON file containing all skills and all original associated information. From this point onward, the harmonized dataset becomes the main input for the rest of the project.
+After those decisions are entered, Step~4 should be rerun so that the harmonized node universe reflects reviewed equivalence rather than the current no-merge baseline.
 
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step4_implementation_note}
 
-The implemented Step~4 produced \texttt{04\_unique\_skills\_harmonization\_mapping.csv}, \texttt{04\_unique\_skills\_harmonized.csv}, \texttt{04\_skills\_harmonized.json}, \texttt{04\_skills\_harmonized.csv}, \texttt{04\_harmonization\_summary.csv}, and \texttt{04\_harmonized\_groups\_summary.csv}. The full harmonized table preserves the cleaned occurrence-level fields and raw source fields, while adding \texttt{old\_name}, \texttt{harmonized\_name}, \texttt{name\_changed}, and \texttt{harmonized\_skill\_id}.
-
-The current run of Step~4 was executed before manual review decisions were entered in \texttt{03\_review\_template\_unique\_skills.csv}. As a result, the harmonization summary currently reports:
+The current corrected run reports:
 \begin{itemize}
-    \item 160 reviewed pairs labeled \texttt{equivalent};
-    \item 0 reviewed pairs labeled \texttt{not\_equivalent};
-    \item 0 reviewed pairs labeled \texttt{uncertain};
-    \item 0 review pairs without a decision;
-    \item 895 unique skills before harmonization;
-    \item 746 harmonized groups after harmonization;
-    \item 97 multi-skill harmonized groups;
-    \item 149 unique skills with changed names;
-    \item 188 full records with changed names.
+    \item \texttt{reviewed\_pairs\_equivalent = 0}
+    \item \texttt{reviewed\_pairs\_not\_equivalent = 0}
+    \item \texttt{reviewed\_pairs\_uncertain = 0}
+    \item \texttt{review\_pairs\_without\_decision = 160}
+    \item \texttt{total\_text\_instances\_before\_harmonization = 895}
+    \item \texttt{total\_harmonized\_groups = 895}
+    \item \texttt{multi\_text\_instance\_harmonized\_groups = 0}
+    \item \texttt{text\_instances\_name\_changed = 0}
+    \item \texttt{full\_skill\_records\_name\_changed = 0}
+    \item \texttt{harmonization\_mode = no\_merge\_baseline}
 \end{itemize}
 
-The current Step~4 outputs therefore represent an active harmonization state rather than a no-merge baseline. The optional file \texttt{04\_harmonized\_name\_selection.csv} is also populated in the current run because multi-skill groups required representative harmonized labels to be selected.
+The current Step~4 outputs are therefore methodologically valid, but they still describe the pre-review baseline. Any actual harmonization requires reviewed \texttt{equivalent} decisions to be entered in Step~3 and then propagated through a rerun of Steps~4 to~9.

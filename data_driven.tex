@@ -1,0 +1,225 @@
+\subsection{Automatic data-driven selection of representation and graph cutoff}
+\label{sec:automatic_selection}
+
+To avoid heuristic selection rules, the choice of semantic representation and sparsification cutoff
+is treated as a joint empirical model-selection problem. The key principle is to separate
+harmonization from graph construction. Step~2 remains a candidate-generation stage for possible
+harmonization, whereas graph selection is performed only after the weighted graphs of Step~6
+have been built. Until reviewed equivalence labels are available, the graph pipeline should
+operate on a fixed no-merge baseline.
+
+Let
+\[
+\mathcal{L}
+=
+\{\texttt{pooled},\texttt{track},\texttt{section},\texttt{programme},\texttt{programme\_year}\}
+\]
+denote the set of aggregation levels, and let
+\[
+\mathcal{R}
+=
+\{\texttt{name\_only},\texttt{concat}\}
+\]
+denote the set of candidate semantic representations. For each level
+\(\ell \in \mathcal{L}\), let \(\mathcal{A}_{\ell}\) denote the set of analytical units at that
+level. For each unit \(A \in \mathcal{A}_{\ell}\), let \(V_A\) denote the node universe fixed from
+the Step~5 graph-ready node construction under the no-merge baseline. Both representations are
+evaluated on this same frozen node set so that representation comparison is not confounded with
+changes in the node universe.
+
+\paragraph{Candidate graph families.}
+For each level \(\ell\), unit \(A \in \mathcal{A}_{\ell}\), and representation
+\(r \in \mathcal{R}\), Step~6 provides a weighted graph
+\[
+G^{(\ell,r)}_{A}
+=
+\bigl(V_A,E^{(\ell,r)}_A,w^{(\ell,r)}_A\bigr),
+\]
+where \(w^{(\ell,r)}_A(i,j)\) is the cosine similarity between nodes \(i\) and \(j\) under
+representation \(r\). The candidate threshold set for level \(\ell\) and representation \(r\) is
+defined as the set of distinct observed edge weights across all units at that level:
+\[
+\Theta_{\ell,r}
+=
+\left\{
+w^{(\ell,r)}_A(i,j)
+:
+A \in \mathcal{A}_{\ell},\;
+\{i,j\} \in E^{(\ell,r)}_A
+\right\}.
+\]
+For any threshold \(\tau \in \Theta_{\ell,r}\), the corresponding sparse graph is
+\[
+H^{(\ell,r,\tau)}_A
+=
+\bigl(
+V_A,\,
+E^{(\ell,r,\tau)}_A,\,
+w^{(\ell,r,\tau)}_A
+\bigr),
+\]
+with
+\[
+E^{(\ell,r,\tau)}_A
+=
+\left\{
+\{i,j\} \in E^{(\ell,r)}_A
+:
+w^{(\ell,r)}_A(i,j) \ge \tau
+\right\},
+\]
+where surviving edges retain their original weights.
+
+\paragraph{Cross-validated resampling at the occurrence level.}
+Selection is based on out-of-sample performance, not on fixed topology rules. For each unit
+\(A \in \mathcal{A}_{\ell}\), the source occurrences contributing to Step~5 are partitioned into
+\(K\) folds. For fold \(k \in \{1,\dots,K\}\), let
+\(\mathcal{O}^{\mathrm{train}}_{A,k}\) and \(\mathcal{O}^{\mathrm{test}}_{A,k}\) denote the
+training and holdout occurrence sets. The node tables of Step~5 and the weighted graphs of
+Step~6 are then rebuilt separately on the training and holdout occurrences.
+
+To estimate the stability of edge retention under threshold \(\tau\), let
+\(b \in \{1,\dots,B\}\) index bootstrap resamples drawn from
+\(\mathcal{O}^{\mathrm{train}}_{A,k}\). For an unordered node pair
+\(e=\{i,j\}\subseteq V_A\), define the training bootstrap edge-retention probability
+\[
+p^{(\ell)}_{e,A,k}(r,\tau)
+=
+\frac{1}{B}
+\sum_{b=1}^{B}
+\mathbf{1}
+\!\left(
+w^{(\ell,r,b)}_{e,A,k,\mathrm{train}} \ge \tau
+\right),
+\]
+where \(w^{(\ell,r,b)}_{e,A,k,\mathrm{train}}\) is the bootstrap training edge weight for pair
+\(e\). If a node is absent in a resample, the corresponding edge weight is treated as zero.
+
+The holdout realization of the same thresholded edge is
+\[
+y^{(\ell)}_{e,A,k}(r,\tau)
+=
+\mathbf{1}
+\!\left(
+w^{(\ell,r)}_{e,A,k,\mathrm{test}} \ge \tau
+\right).
+\]
+
+\paragraph{Proper scoring rule.}
+For binary edge-retention outcomes, predictive performance is measured by the log-loss
+\[
+L(y,p)
+=
+-y\log p - (1-y)\log(1-p).
+\]
+Let
+\[
+\bar y^{(\ell)}_{A,k}(r,\tau)
+=
+\frac{1}{|P_A|}
+\sum_{e \in P_A}
+y^{(\ell)}_{e,A,k}(r,\tau),
+\]
+where \(P_A=\{\{i,j\}: i,j \in V_A,\; i<j\}\) is the set of all unordered node pairs in unit \(A\).
+The quantity \(\bar y^{(\ell)}_{A,k}(r,\tau)\) is the holdout base-rate benchmark for that
+unit-fold combination.
+
+The cross-validated skill score for level \(\ell\), representation \(r\), and threshold \(\tau\)
+is then
+\[
+\mathrm{Skill}_{\ell}(r,\tau)
+=
+1
+-
+\frac{
+\sum\limits_{A \in \mathcal{A}_{\ell}}
+\sum\limits_{k=1}^{K}
+\sum\limits_{e \in P_A}
+L\!\left(
+y^{(\ell)}_{e,A,k}(r,\tau),
+p^{(\ell)}_{e,A,k}(r,\tau)
+\right)
+}{
+\sum\limits_{A \in \mathcal{A}_{\ell}}
+\sum\limits_{k=1}^{K}
+\sum\limits_{e \in P_A}
+L\!\left(
+y^{(\ell)}_{e,A,k}(r,\tau),
+\bar y^{(\ell)}_{A,k}(r,\tau)
+\right)
+}.
+\]
+A larger value of \(\mathrm{Skill}_{\ell}(r,\tau)\) indicates better out-of-sample predictive
+performance relative to the holdout edge-rate baseline.
+
+\paragraph{Joint automatic selection.}
+For each aggregation level \(\ell\), the selected representation and cutoff are chosen jointly as
+\[
+(r_{\ell}^{*},\tau_{\ell}^{*})
+=
+\arg\max_{r \in \mathcal{R},\;\tau \in \Theta_{\ell,r}}
+\mathrm{Skill}_{\ell}(r,\tau).
+\]
+This yields one empirically selected graph-construction rule per level. The binary sparse graph
+exported for level \(\ell\) is therefore based on the pair
+\((r_{\ell}^{*},\tau_{\ell}^{*})\).
+
+\paragraph{Decision rule for whether sparsification is supported.}
+Thresholding should not be forced when the data do not support it. If
+\[
+\max_{r \in \mathcal{R},\;\tau \in \Theta_{\ell,r}}
+\mathrm{Skill}_{\ell}(r,\tau)
+\le 0,
+\]
+then no thresholded graph outperforms the trivial holdout base-rate model. In that case, the
+automatic decision for level \(\ell\) is to retain the full weighted graph and not export a binary
+sparse graph for that level.
+
+\paragraph{Interpretation.}
+This procedure eliminates the need for fixed admissibility rules based on largest-component share,
+isolate share, susceptibility tie-breaking, or hand-set structural-versus-parsimony weights. The
+representation and cutoff are selected directly from out-of-sample performance, and the decision
+is made separately for each aggregation level rather than once in a pooled reference graph.
+
+\paragraph{Workflow implications.}
+Under this design, the workflow is modified as follows.
+\begin{enumerate}
+    \item Step~2 is used only for candidate generation for harmonization and no longer selects
+    graph cutoffs.
+    \item Steps~3 and~4 remain separate from graph construction. Until reviewed pair labels
+    exist, the graph pipeline uses the no-merge baseline.
+    \item Step~5 formally defines all graph levels:
+    \(\texttt{pooled}\), \(\texttt{track}\), \(\texttt{section}\),
+    \(\texttt{programme}\), and \(\texttt{programme\_year}\).
+    \item Step~6 builds weighted graphs for both \texttt{name\_only} and \texttt{concat}
+    on the same node universe.
+    \item Steps~7 and~8 are replaced by one level-wise automatic model-selection step that
+    jointly selects representation and cutoff.
+    \item Step~9 uses the selected pair \((r_{\ell}^{*},\tau_{\ell}^{*})\) for each level.
+\end{enumerate}
+
+\paragraph{Recommended outputs.}
+The automatic-selection step should write at least the following files:
+\begin{itemize}
+    \item \texttt{07\_levelwise\_model\_selection\_surface.csv}
+    \item \texttt{07\_levelwise\_selected\_models.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_<level>.csv}
+\end{itemize}
+The file \texttt{07\_levelwise\_model\_selection\_surface.csv} should contain one row per
+\((\ell,r,\tau)\) combination, with columns such as
+\texttt{level}, \texttt{representation}, \texttt{threshold},
+\texttt{cv\_logloss}, \texttt{cv\_skill}, \texttt{n\_units},
+\texttt{n\_candidate\_edges}, and \texttt{selected\_flag}. The file
+\texttt{07\_levelwise\_selected\_models.csv} should contain one row per aggregation level with
+the selected representation, selected threshold, cross-validated skill, and a logical field
+indicating whether sparsification was supported. The file
+\texttt{07\_edge\_selection\_probabilities\_<level>.csv} should report edge-level retention
+probabilities under the selected model so that graph uncertainty remains visible in downstream
+analysis.
+
+\paragraph{Relation to later harmonization.}
+Once reviewed equivalence labels are available from the harmonization workflow, an automatic
+pair-classification model may be trained separately for synonym detection. However, that
+harmonization model should remain distinct from the graph-selection procedure above. Pair
+equivalence and graph sparsification are different inferential tasks and should not be collapsed
+into a single cosine-cutoff rule.

@@ -13,20 +13,30 @@ Directory.CreateDirectory(graphsFullDirectory);
 var familyConfigs = new[]
 {
     new FamilyConfig(
-        familyName: "sections",
-        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_sections.csv"),
-        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_sections.csv"),
-        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_sections.csv")),
+        levelName: "pooled",
+        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_pooled.csv"),
+        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_pooled.csv"),
+        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_pooled.csv")),
     new FamilyConfig(
-        familyName: "tracks",
+        levelName: "tracks",
         inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_tracks.csv"),
         matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_tracks.csv"),
         edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_tracks.csv")),
     new FamilyConfig(
-        familyName: "pooled",
-        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_pooled.csv"),
-        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_pooled.csv"),
-        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_pooled.csv"))
+        levelName: "sections",
+        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_sections.csv"),
+        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_sections.csv"),
+        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_sections.csv")),
+    new FamilyConfig(
+        levelName: "programmes",
+        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_programmes.csv"),
+        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_programmes.csv"),
+        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_programmes.csv")),
+    new FamilyConfig(
+        levelName: "programme_years",
+        inputPath: Path.Combine(nodeTablesDirectory, "05_graph_ready_nodes_programme_years.csv"),
+        matrixOutputPath: Path.Combine(similarityMatricesDirectory, "06_similarity_matrices_programme_years.csv"),
+        edgeOutputPath: Path.Combine(graphsFullDirectory, "06_weighted_edges_programme_years.csv"))
 };
 
 var summaryPath = Path.Combine(graphsFullDirectory, "06_weighted_graph_summary.csv");
@@ -561,13 +571,15 @@ static string ToRelativePath(string root, string path)
 
 static int UnitTypeOrder(string unitType) => unitType switch
 {
-    "section" => 1,
+    "pooled" => 1,
     "track" => 2,
-    "pooled" => 3,
+    "section" => 3,
+    "programme" => 4,
+    "programme_year" => 5,
     _ => 99
 };
 
-readonly record struct FamilyConfig(string familyName, string inputPath, string matrixOutputPath, string edgeOutputPath);
+readonly record struct FamilyConfig(string levelName, string inputPath, string matrixOutputPath, string edgeOutputPath);
 
 readonly record struct NodeRecord(
     string UnitType,

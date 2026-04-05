@@ -1,15 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$PairwiseSimilarityPath = "",
-    [string]$CutoffSelectionPath = "",
+    [string]$ScreeningCutoffPath = "",
     [string]$ReviewPairsPath = "",
     [string]$ReviewSummaryPath = "",
-    [string]$ReviewTemplatePath = "",
-    [switch]$AutoMarkRetainedPairsAsEquivalent,
-    [string]$AutoReviewNote = "automatic_equivalence_by_cutoff",
-    [double]$DefaultNameOnlyCutoff = 0.70622,
-    [double]$DefaultNameDescriptionCutoff = 0.701394,
-    [string]$DefaultChosenRepresentation = "both"
+    [string]$ReviewTemplatePath = ""
 )
 
 Set-StrictMode -Version Latest
@@ -18,15 +13,15 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $PSCommandPath
 
 if ([string]::IsNullOrWhiteSpace($PairwiseSimilarityPath)) {
-    $PairwiseSimilarityPath = Join-Path $scriptRoot "..\outputs\similarity_tables\02_global_pairwise_similarity.csv"
+    $PairwiseSimilarityPath = Join-Path $scriptRoot "..\outputs\similarity_tables\02_candidate_pairwise_similarity.csv"
 }
 
-if ([string]::IsNullOrWhiteSpace($CutoffSelectionPath)) {
-    $CutoffSelectionPath = Join-Path $scriptRoot "..\outputs\similarity_tables\02_cutoff_selection.csv"
+if ([string]::IsNullOrWhiteSpace($ScreeningCutoffPath)) {
+    $ScreeningCutoffPath = Join-Path $scriptRoot "..\outputs\similarity_tables\02_screening_cutoff_selection.csv"
 }
 
 if ([string]::IsNullOrWhiteSpace($ReviewPairsPath)) {
-    $ReviewPairsPath = Join-Path $scriptRoot "..\outputs\review\03_review_pairs_unique_skills.csv"
+    $ReviewPairsPath = Join-Path $scriptRoot "..\outputs\review\03_review_pairs_textual_instances.csv"
 }
 
 if ([string]::IsNullOrWhiteSpace($ReviewSummaryPath)) {
@@ -34,17 +29,14 @@ if ([string]::IsNullOrWhiteSpace($ReviewSummaryPath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ReviewTemplatePath)) {
-    $ReviewTemplatePath = Join-Path $scriptRoot "..\outputs\review\03_review_template_unique_skills.csv"
+    $ReviewTemplatePath = Join-Path $scriptRoot "..\outputs\review\03_review_template_textual_instances.csv"
 }
 
 function Resolve-NumericCutoff {
-    param(
-        [string]$RawValue,
-        [double]$Fallback
-    )
+    param([string]$RawValue)
 
     if ([string]::IsNullOrWhiteSpace($RawValue)) {
-        return $Fallback
+        throw "Missing required screening cutoff value."
     }
 
     return [double]::Parse($RawValue, [System.Globalization.CultureInfo]::InvariantCulture)
@@ -52,15 +44,12 @@ function Resolve-NumericCutoff {
 
 function Format-BooleanFlag {
     param([bool]$Value)
-    if ($Value) {
-        return "true"
-    }
-
+    if ($Value) { return "true" }
     return "false"
 }
 
 $resolvedPairwisePath = [System.IO.Path]::GetFullPath($PairwiseSimilarityPath)
-$resolvedCutoffPath = [System.IO.Path]::GetFullPath($CutoffSelectionPath)
+$resolvedCutoffPath = [System.IO.Path]::GetFullPath($ScreeningCutoffPath)
 $resolvedReviewPairsPath = [System.IO.Path]::GetFullPath($ReviewPairsPath)
 $resolvedReviewSummaryPath = [System.IO.Path]::GetFullPath($ReviewSummaryPath)
 $resolvedReviewTemplatePath = [System.IO.Path]::GetFullPath($ReviewTemplatePath)
@@ -73,16 +62,13 @@ foreach ($requiredPath in @($resolvedPairwisePath, $resolvedCutoffPath)) {
 
 $cutoffRow = Import-Csv -LiteralPath $resolvedCutoffPath | Select-Object -First 1
 if ($null -eq $cutoffRow) {
-    throw "Cutoff selection file is empty: $resolvedCutoffPath"
+    throw "Screening cutoff file is empty: $resolvedCutoffPath"
 }
 
-$nameOnlyCutoff = Resolve-NumericCutoff -RawValue $cutoffRow.chosen_cutoff_name_only -Fallback $DefaultNameOnlyCutoff
-$nameDescriptionCutoff = Resolve-NumericCutoff -RawValue $cutoffRow.chosen_cutoff_name_description -Fallback $DefaultNameDescriptionCutoff
-$chosenRepresentation = if ([string]::IsNullOrWhiteSpace($cutoffRow.chosen_representation)) {
-    $DefaultChosenRepresentation
-} else {
-    $cutoffRow.chosen_representation
-}
+$nameOnlyCutoff = Resolve-NumericCutoff -RawValue $cutoffRow.screening_cutoff_name_only
+$nameDescriptionCutoff = Resolve-NumericCutoff -RawValue $cutoffRow.screening_cutoff_name_description
+$cutoffStatus = [string]$cutoffRow.cutoff_status
+$cutoffSource = [string]$cutoffRow.cutoff_source
 
 $reviewDirectory = Split-Path -Parent $resolvedReviewPairsPath
 if (-not (Test-Path -LiteralPath $reviewDirectory)) {
@@ -93,6 +79,8 @@ $retainedPairs = New-Object System.Collections.Generic.List[object]
 $passNameOnlyCount = 0
 $passNameDescriptionCount = 0
 $passBothCount = 0
+$requiresManualValidationCount = 0
+$exactNameStratumCount = 0
 
 foreach ($row in Import-Csv -LiteralPath $resolvedPairwisePath) {
     $cosineNameOnly = [double]::Parse($row.cosine_name_only, [System.Globalization.CultureInfo]::InvariantCulture)
@@ -105,28 +93,28 @@ foreach ($row in Import-Csv -LiteralPath $resolvedPairwisePath) {
         continue
     }
 
-    if ($passNameOnly) {
-        $passNameOnlyCount++
-    }
-
-    if ($passNameDescription) {
-        $passNameDescriptionCount++
-    }
-
-    if ($passNameOnly -and $passNameDescription) {
-        $passBothCount++
-    }
+    if ($passNameOnly) { $passNameOnlyCount++ }
+    if ($passNameDescription) { $passNameDescriptionCount++ }
+    if ($passNameOnly -and $passNameDescription) { $passBothCount++ }
+    if ($row.requires_manual_validation -eq "true") { $requiresManualValidationCount++ }
+    if ($row.review_stratum -eq "exact_name_review_stratum") { $exactNameStratumCount++ }
 
     $retainedPairs.Add([pscustomobject]@{
         pair_id = $row.pair_id
-        unique_skill_id_1 = $row.skill_id_1
-        unique_skill_id_2 = $row.skill_id_2
+        text_instance_id_1 = $row.text_instance_id_1
+        text_instance_id_2 = $row.text_instance_id_2
         name_1 = $row.name_1
+        description_1 = $row.description_1
         name_2 = $row.name_2
+        description_2 = $row.description_2
+        exact_name_match = $row.exact_name_match
+        exact_description_match = $row.exact_description_match
+        review_stratum = $row.review_stratum
+        requires_manual_validation = $row.requires_manual_validation
         cosine_name_only = $row.cosine_name_only
         cosine_name_description = $row.cosine_name_description
-        pass_name_only_cutoff = Format-BooleanFlag -Value $passNameOnly
-        pass_name_description_cutoff = Format-BooleanFlag -Value $passNameDescription
+        pass_name_only_screening_cutoff = Format-BooleanFlag -Value $passNameOnly
+        pass_name_description_screening_cutoff = Format-BooleanFlag -Value $passNameDescription
     }) | Out-Null
 }
 
@@ -135,39 +123,44 @@ $retainedPairs | Export-Csv -LiteralPath $resolvedReviewPairsPath -NoTypeInforma
 $reviewTemplateRows = foreach ($row in $retainedPairs) {
     [pscustomobject]@{
         pair_id = $row.pair_id
-        unique_skill_id_1 = $row.unique_skill_id_1
-        unique_skill_id_2 = $row.unique_skill_id_2
+        text_instance_id_1 = $row.text_instance_id_1
+        text_instance_id_2 = $row.text_instance_id_2
         name_1 = $row.name_1
+        description_1 = $row.description_1
         name_2 = $row.name_2
+        description_2 = $row.description_2
+        exact_name_match = $row.exact_name_match
+        exact_description_match = $row.exact_description_match
+        review_stratum = $row.review_stratum
+        requires_manual_validation = $row.requires_manual_validation
         cosine_name_only = $row.cosine_name_only
         cosine_name_description = $row.cosine_name_description
-        review_decision = if ($AutoMarkRetainedPairsAsEquivalent) { "equivalent" } else { "" }
-        review_notes = if ($AutoMarkRetainedPairsAsEquivalent) { $AutoReviewNote } else { "" }
+        review_decision = ""
+        review_notes = ""
     }
 }
 
 $reviewTemplateRows | Export-Csv -LiteralPath $resolvedReviewTemplatePath -NoTypeInformation -Encoding UTF8
 
 $summaryRows = @(
-    [pscustomobject]@{ summary_metric = "chosen_cutoff_name_only"; value = $nameOnlyCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture) }
-    [pscustomobject]@{ summary_metric = "chosen_cutoff_name_description"; value = $nameDescriptionCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture) }
-    [pscustomobject]@{ summary_metric = "chosen_representation"; value = $chosenRepresentation }
-    [pscustomobject]@{ summary_metric = "pairs_passing_name_only_cutoff"; value = $passNameOnlyCount }
-    [pscustomobject]@{ summary_metric = "pairs_passing_name_description_cutoff"; value = $passNameDescriptionCount }
-    [pscustomobject]@{ summary_metric = "pairs_passing_both_cutoffs"; value = $passBothCount }
+    [pscustomobject]@{ summary_metric = "screening_cutoff_name_only"; value = $nameOnlyCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture) }
+    [pscustomobject]@{ summary_metric = "screening_cutoff_name_description"; value = $nameDescriptionCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture) }
+    [pscustomobject]@{ summary_metric = "cutoff_source"; value = $cutoffSource }
+    [pscustomobject]@{ summary_metric = "cutoff_status"; value = $cutoffStatus }
+    [pscustomobject]@{ summary_metric = "pairs_passing_name_only_screening_cutoff"; value = $passNameOnlyCount }
+    [pscustomobject]@{ summary_metric = "pairs_passing_name_description_screening_cutoff"; value = $passNameDescriptionCount }
+    [pscustomobject]@{ summary_metric = "pairs_passing_both_screening_cutoffs"; value = $passBothCount }
+    [pscustomobject]@{ summary_metric = "review_pairs_requiring_manual_validation"; value = $requiresManualValidationCount }
+    [pscustomobject]@{ summary_metric = "review_pairs_in_exact_name_stratum"; value = $exactNameStratumCount }
     [pscustomobject]@{ summary_metric = "total_review_pairs"; value = $retainedPairs.Count }
+    [pscustomobject]@{ summary_metric = "review_decisions_pre_filled"; value = "false" }
+    [pscustomobject]@{ summary_metric = "allowed_review_states"; value = "equivalent;not_equivalent;uncertain" }
 )
 
 $summaryRows | Export-Csv -LiteralPath $resolvedReviewSummaryPath -NoTypeInformation -Encoding UTF8
 
-Write-Host ("Loaded cutoffs: name_only={0}, name_description={1}, representation={2}" -f
+Write-Host ("Loaded screening cutoffs: name_only={0}, name_description={1}" -f
     $nameOnlyCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture),
-    $nameDescriptionCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture),
-    $chosenRepresentation)
+    $nameDescriptionCutoff.ToString("0.######", [System.Globalization.CultureInfo]::InvariantCulture))
 Write-Host ("Retained review pairs: {0}" -f $retainedPairs.Count)
-Write-Host ("Pairs passing name-only cutoff: {0}" -f $passNameOnlyCount)
-Write-Host ("Pairs passing name-description cutoff: {0}" -f $passNameDescriptionCount)
-Write-Host ("Pairs passing both cutoffs: {0}" -f $passBothCount)
-if ($AutoMarkRetainedPairsAsEquivalent) {
-    Write-Host ("Auto-filled review_decision='equivalent' for all retained pairs with note '{0}'." -f $AutoReviewNote)
-}
+Write-Host "Review template generated with blank review_decision and review_notes fields."

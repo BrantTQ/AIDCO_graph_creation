@@ -9,6 +9,7 @@
 # Known large JSON artifacts in this project
 /all_tracks_embeddings_enriched.json
 /data_processed/01_skills_occurrence_clean.json
+/data_processed/01_skills_occurrence_clean_sensitivity_excluding_ambiguous.json
 /data_processed/04_skills_harmonized.json
 
 # Local LaTeX build artifacts

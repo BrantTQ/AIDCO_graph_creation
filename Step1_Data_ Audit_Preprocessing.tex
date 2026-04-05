@@ -1,196 +1,68 @@
 \subsection{Step 1: Data Audit and Preprocessing}
 \label{sec:step1_data_audit}
 
-Before estimating semantic similarity between skills, the raw corpus must be converted into a clean, structurally consistent, and reproducible occurrence-level dataset. The purpose of this stage is not yet to harmonize skill labels or construct graphs, but to ensure that all downstream operations are applied to validated inputs. Because the skills were extracted automatically from curriculum documents with a large language model, the raw JSON may contain inconsistencies in formatting, missing values, duplicated records, malformed embedding vectors, and heterogeneous conventions across tracks, sections, programmes, and years. If such issues are not addressed at the beginning of the pipeline, later steps may confound genuine curricular structure with artifacts introduced during extraction or storage.
+Step~1 converts the raw extracted JSON into a validated occurrence-level dataset that can support the later harmonization and graph-building stages. The step is intentionally non-destructive: it standardizes formatting, validates schema and vectors, expands list-like curricular provenance into occurrence rows, and records every repair or ambiguity in explicit audit files.
 
-In this project, each record in the raw JSON is treated as a \emph{skill occurrence}. A skill occurrence corresponds to one extracted skill associated with a specific curricular origin, identified through fields such as section, programme, year, and education type. At this stage, occurrences are not yet merged into canonical skills and no semantic decisions are made about equivalence across records. The audit therefore preserves the raw granularity of the extracted corpus while standardizing its representation and documenting any anomalies that may influence later analysis.
+The expected raw fields are \texttt{skill\_id}, \texttt{name}, \texttt{description}, \texttt{sections}, \texttt{programmes}, \texttt{year}, \texttt{edu\_type}, \texttt{chunk\_id}, \texttt{name\_vector}, and \texttt{description\_vector}. The implemented preprocessing verifies that these fields are present, parses the two embedding columns as numeric arrays, checks dimensional consistency, normalizes text and metadata conservatively, and expands the raw records to one row per curricular occurrence.
 
-The first task in this step is schema validation. Each record must be checked for the presence of the expected fields: \texttt{skill\_id}, \texttt{name}, \texttt{description}, \texttt{sections}, \texttt{programmes}, \texttt{year}, \texttt{edu\_type}, \texttt{chunk\_id}, \texttt{name\_vector}, and \texttt{description\_vector}. This validation has two objectives. First, it verifies whether the extraction pipeline produced a complete and internally consistent JSON structure. Second, it identifies whether some fields contain null values, empty strings, malformed objects, or unexpected types. In particular, the metadata fields \texttt{sections} and \texttt{programmes} must be inspected carefully to determine whether they are stored as single values or as lists. This distinction is important because the analytical units defined later in the project depend on a stable interpretation of curricular origin.
+The key correction introduced in this pass concerns curricular provenance. Direct broadcasting of \texttt{sections}, \texttt{programmes}, and \texttt{year} is attempted first. When that broadcasting is not structurally sufficient, the script falls back to the \texttt{chunk\_id}-encoded section-programme pairs together with a stable year lookup. These fallback repairs are not silently accepted: they are flagged with \texttt{provenance\_resolution\_confidence} and \texttt{requires\_manual\_validation}, and a sensitivity version of the cleaned dataset is exported with those ambiguous cases removed.
 
-The second task is textual and metadata normalization. At this stage, the content of the skill names and descriptions should not be semantically rewritten, but their representation should be standardized. This includes trimming whitespace, standardizing character encoding, harmonizing capitalization when appropriate, and ensuring that metadata categories such as track names, programme labels, and section identifiers follow a single convention throughout the corpus. For example, if the same track or section appears under slightly different spellings, abbreviations, or formatting patterns, these variants should be mapped to a unique standardized form. All such transformations must be logged explicitly so that the preprocessing remains transparent and reversible.
-
-The third task is vector integrity verification. Since the project relies on embeddings stored in \texttt{name\_vector} and \texttt{description\_vector}, these fields must be parsed and checked for numerical consistency. Every vector should be confirmed to be readable, numeric, and of the expected dimensionality. Records containing vectors of different lengths, non-numeric entries, truncated arrays, or empty values must be flagged. This step is essential because similarity estimation in the next stage assumes that all embeddings live in the same vector space and can therefore be compared directly. If malformed vectors are not identified here, the pairwise similarity tables generated in the harmonization step may become unreliable or fail computationally.
-
-The fourth task is duplicate detection at the occurrence level. Exact duplicates may arise if the same skill was extracted more than once from the same curricular unit, or if duplicate records were introduced during data assembly. These duplicates should be identified using a strict rule based on the joint combination of the substantive and provenance fields, such as skill name, description, curricular origin, and embedding content. At this stage, the purpose is not to remove semantically similar skills across curricula, but only to detect records that appear to be literal or near-literal duplicates of the same occurrence. Any removals performed here must be conservative and fully documented in an exclusion or duplicate-resolution log.
-
-The fifth task is coverage analysis. Once the dataset has been validated and standardized, a descriptive summary of the corpus must be produced. This summary should report the total number of skill occurrences, the number of valid and invalid records, the number of unique values for sections, programmes, years, and education types, and the distribution of records across these dimensions. This diagnostic is important for two reasons. First, it provides a factual inventory of the corpus before harmonization. Second, it reveals whether some curricular units are underrepresented, duplicated, or missing altogether, which could affect later comparison across sections, tracks, and pooled units.
-
-The output of this stage is a cleaned master dataset at the skill-occurrence level. This cleaned dataset remains faithful to the original extraction, but it is structurally validated, consistently formatted, and ready for pairwise similarity analysis in the next step. No canonical skill names are introduced yet, and no graph is constructed at this stage. Instead, the main contribution of Step~1 is to create a reliable input base for all subsequent operations and to produce a transparent audit trail describing what was checked, what was standardized, what was excluded, and what still requires manual confirmation.
-
-This step also establishes an important methodological principle for the rest of the pipeline: preprocessing must be non-destructive. Raw information should never be overwritten without trace. Whenever a value is standardized, repaired, or removed, the transformation must be documented in an accompanying log file. This guarantees that later harmonization and graph construction can be interpreted as analytical choices rather than hidden data modifications, thereby improving reproducibility and making the full workflow auditable.
+The output of Step~1 is therefore not only a cleaned occurrence table, but also an auditable record of what was standardized, what remained exact, what required conservative repair, and which cases still need manual confirmation before they are treated as fully trusted provenance.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step1_outputs}
 
-The main outputs of Step~1 consist of a cleaned occurrence-level dataset, a set of audit and validation reports, and a decision log for any issues requiring manual confirmation. These outputs are intended to document both the cleaned data and the full preprocessing logic applied before similarity estimation.
-
-\paragraph{Files}
-The following core files should be produced at the end of this step:
+The corrected Step~1 produces the following files:
 \begin{itemize}
-    \item \texttt{01\_skills\_occurrence\_clean.json}: cleaned occurrence-level dataset, still with one row per extracted skill occurrence.
-    \item \texttt{01\_skills\_occurrence\_clean.csv}: tabular version of the cleaned occurrence-level dataset for manual inspection and downstream processing.
-    \item \texttt{01\_data\_audit\_summary.csv}: summary of completeness, validity, duplicates, and coverage.
-    \item \texttt{01\_vector\_integrity\_report.csv}: record-level report describing whether \texttt{name\_vector} and \texttt{description\_vector} are valid, numeric, and dimensionally consistent.
-    \item \texttt{01\_duplicate\_report.csv}: exact or near-exact duplicate candidates detected at the occurrence level.
-    \item \texttt{01\_metadata\_standardization\_log.csv}: log of any standardization applied to fields such as \texttt{sections}, \texttt{programmes}, \texttt{edu\_type}, or text formatting.
-    \item \texttt{01\_preprocessing\_decision\_log.csv}: decision log used only if the audit reveals ambiguities that require manual confirmation.
+    \item \texttt{01\_skills\_occurrence\_clean.json}
+    \item \texttt{01\_skills\_occurrence\_clean.csv}
+    \item \texttt{01\_skills\_occurrence\_clean\_sensitivity\_excluding\_ambiguous.json}
+    \item \texttt{01\_skills\_occurrence\_clean\_sensitivity\_excluding\_ambiguous.csv}
+    \item \texttt{01\_unique\_textual\_instances\_vectors.csv}
+    \item \texttt{01\_data\_audit\_summary.csv}
+    \item \texttt{01\_schema\_validation\_summary.csv}
+    \item \texttt{01\_vector\_integrity\_report.csv}
+    \item \texttt{01\_vector\_integrity\_summary.csv}
+    \item \texttt{01\_duplicate\_report.csv}
+    \item \texttt{01\_coverage\_by\_curricular\_origin.csv}
+    \item \texttt{01\_metadata\_standardization\_log.csv}
+    \item \texttt{01\_preprocessing\_decision\_log.csv}
+    \item \texttt{01\_provenance\_resolution\_audit.csv}
+    \item \texttt{01\_step1\_deviations\_notes.txt}
 \end{itemize}
 
-\paragraph{Tables to Produce}
-The following tables should be generated as part of the audit and preprocessing documentation.
-
-\begin{enumerate}
-    \item \textbf{Schema validation and missingness summary.}  
-    This table documents whether the expected fields are present and structurally valid.
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{field\_name}
-        \item \texttt{expected\_type}
-        \item \texttt{non\_null\_count}
-        \item \texttt{null\_count}
-        \item \texttt{empty\_string\_count}
-        \item \texttt{invalid\_type\_count}
-    \end{itemize}
-
-    \item \textbf{Vector integrity summary.}  
-    This table summarizes the validity and dimensional consistency of the embedding fields.
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{vector\_field}
-        \item \texttt{expected\_dimension}
-        \item \texttt{valid\_count}
-        \item \texttt{invalid\_count}
-        \item \texttt{non\_numeric\_count}
-        \item \texttt{wrong\_dimension\_count}
-        \item \texttt{empty\_count}
-    \end{itemize}
-
-    \item \textbf{Duplicate occurrence report.}  
-    This table lists exact or near-exact duplicate skill occurrences detected during preprocessing.
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{duplicate\_group\_id}
-        \item \texttt{skill\_id}
-        \item \texttt{name}
-        \item \texttt{description}
-        \item \texttt{sections}
-        \item \texttt{programmes}
-        \item \texttt{year}
-        \item \texttt{edu\_type}
-        \item \texttt{duplicate\_type}
-        \item \texttt{recommended\_action}
-    \end{itemize}
-
-    \item \textbf{Coverage by curricular origin.}  
-    This table summarizes the distribution of skill occurrences across the curricular structure.
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{edu\_type}
-        \item \texttt{section}
-        \item \texttt{programme}
-        \item \texttt{year}
-        \item \texttt{n\_skill\_occurrences}
-        \item \texttt{n\_unique\_names}
-    \end{itemize}
-
-    \item \textbf{Metadata standardization log.}  
-    This table records all standardization rules applied to metadata or text formatting.
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{field\_name}
-        \item \texttt{raw\_value}
-        \item \texttt{standardized\_value}
-        \item \texttt{n\_affected\_records}
-        \item \texttt{rule\_applied}
-    \end{itemize}
-\end{enumerate}
-
-\paragraph{Information That Should Be Recorded}
-At the end of this step, the following information should be known and explicitly documented:
-\begin{itemize}
-    \item the total number of raw records;
-    \item the total number of valid records;
-    \item the number of invalid or excluded records;
-    \item whether \texttt{sections} and \texttt{programmes} are scalar or list-like in practice;
-    \item the embedding dimension for \texttt{name\_vector};
-    \item the embedding dimension for \texttt{description\_vector};
-    \item whether all vectors are dimensionally and numerically consistent;
-    \item whether exact duplicates exist;
-    \item whether metadata labels require standardization;
-    \item whether any curricular units are missing or underrepresented.
-\end{itemize}
+The cleaned occurrence dataset now includes the fields \texttt{text\_instance\_id}, \texttt{provenance\_resolution\_confidence}, and \texttt{requires\_manual\_validation}. The file \texttt{01\_unique\_textual\_instances\_vectors.csv} is the corrected screening base used in Step~2.
 
 \subsubsection{Fields to Fill After Concluding This Step}
 \label{sec:step1_fields_to_fill}
 
-The following fields only need to be filled if the audit reveals ambiguity or requires a manual decision. In such cases, the decision should be recorded in \texttt{01\_preprocessing\_decision\_log.csv} so that the preprocessing pipeline remains transparent and reproducible.
-
-\paragraph{File}
-\texttt{01\_preprocessing\_decision\_log.csv}
-
-\paragraph{Columns}
-The decision log should contain the following columns:
+No extra analyst input is required to complete the computational part of Step~1. The only remaining manual task is to inspect the flagged provenance repairs recorded in:
 \begin{itemize}
-    \item \texttt{decision\_id}
-    \item \texttt{issue\_type}
-    \item \texttt{affected\_field}
-    \item \texttt{detected\_problem}
-    \item \texttt{candidate\_options}
-    \item \texttt{chosen\_option}
-    \item \texttt{rationale}
-    \item \texttt{n\_affected\_records}
-    \item \texttt{status}
+    \item \texttt{01\_preprocessing\_decision\_log.csv}
+    \item \texttt{01\_provenance\_resolution\_audit.csv}
 \end{itemize}
 
-\paragraph{Typical Decisions That May Need to Be Filled}
-The most common manual decisions expected at this stage are the following:
-\begin{itemize}
-    \item \textbf{Storage rule for \texttt{sections}:}
-    \begin{itemize}
-        \item preserve as list;
-        \item explode into one row per section;
-        \item convert to a single standardized label.
-    \end{itemize}
-
-    \item \textbf{Storage rule for \texttt{programmes}:}
-    \begin{itemize}
-        \item preserve as list;
-        \item explode into one row per programme;
-        \item convert to a single standardized label.
-    \end{itemize}
-
-    \item \textbf{Policy for invalid vectors:}
-    \begin{itemize}
-        \item exclude record;
-        \item repair from source if possible;
-        \item keep flagged but exclude from similarity calculations.
-    \end{itemize}
-
-    \item \textbf{Policy for missing descriptions:}
-    \begin{itemize}
-        \item keep record with missing description;
-        \item replace with empty string;
-        \item exclude record from combined-embedding analysis only.
-    \end{itemize}
-
-    \item \textbf{Policy for exact duplicates:}
-    \begin{itemize}
-        \item remove duplicate copy;
-        \item keep all and flag;
-        \item merge with provenance note.
-    \end{itemize}
-\end{itemize}
+These files identify the raw records whose occurrence expansion depends on fallback provenance reconstruction and should therefore be checked before the fully trusted node universe is frozen.
 
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step1_implementation_note}
 
-The implemented Step~1 produced \texttt{01\_skills\_occurrence\_clean.json}, \texttt{01\_skills\_occurrence\_clean.csv}, and the diagnostics in \texttt{outputs/diagnostics}. In the current run, the raw input contained 895 records, the cleaned occurrence table contains 1,038 rows, both vector fields are 3072-dimensional, and no vectors were invalid.
-
-The main documented deviations from the original written plan are the following:
+The current corrected run produced:
 \begin{itemize}
-    \item \textbf{Occurrence expansion rule.} The raw fields \texttt{sections} and \texttt{programmes} are stored as list-like strings, and 26 records could not be resolved cleanly by simple list broadcasting. The implemented occurrence table therefore uses the unique \texttt{section + programme} pairs encoded in \texttt{chunk\_id}, together with a stable \texttt{section + programme -> year} lookup.
-    \item \textbf{Duplicate detection scope.} The implemented preprocessing detects exact occurrence-level duplicates only. Near-duplicate detection was deferred intentionally to Step~2 semantic similarity analysis.
-    \item \textbf{Standardization scope.} Normalization was kept conservative: trimming whitespace, collapsing repeated internal whitespace, and uppercasing metadata identifiers. Skill names and descriptions were not aggressively rewritten during preprocessing.
-    \item \textbf{Occurrence-level schema.} The cleaned dataset uses singular fields \texttt{section}, \texttt{programme}, and \texttt{year}, while preserving raw source fields separately.
-    \item \textbf{CSV serialization.} Array-valued fields such as vectors and grouped identifiers are stored as JSON strings in the CSV export.
+    \item 895 raw records;
+    \item 1,038 occurrence rows after preprocessing;
+    \item 26 raw records with list-length mismatch that required chunk-based provenance repair;
+    \item 88 occurrence rows flagged with \texttt{requires\_manual\_validation = true};
+    \item 950 rows in the sensitivity dataset that excludes those ambiguous cases;
+    \item 895 unique textual instances in \texttt{01\_unique\_textual\_instances\_vectors.csv};
+    \item 0 invalid \texttt{name\_vector} rows and 0 invalid \texttt{description\_vector} rows;
+    \item 0 exact duplicate occurrence groups.
+\end{itemize}
+
+The main documented implementation choices are:
+\begin{itemize}
+    \item direct metadata broadcasting is preferred, with chunk-based reconstruction used only as a fallback;
+    \item duplicate detection is exact-only at the occurrence level;
+    \item normalization is conservative and does not rewrite the semantic content of the extracted skills;
+    \item array-valued fields are serialized as JSON strings in CSV exports for traceability.
 \end{itemize}

@@ -1,247 +1,60 @@
-\subsection{Step 7: Pooled-reference susceptibility sparsification and export of comparison-safe graph families}
+\subsection{Step 7: Automatic Data-driven Selection of Representation and Graph Cutoff}
 \label{sec:step7}
 
-The weighted candidate graphs inherited from the previous steps remain too dense to be interpreted directly as curriculum networks. The purpose of the present step is therefore to convert each representation family into a sparse graph basis using the susceptibility criterion, while preserving cross-unit comparability. In the restarted workflow, sparsification is performed primarily in the pooled reference universe and only secondarily at the local unit level for diagnostic purposes. This distinction is essential: the pooled-reference sparse graphs are used for the main comparisons across years, programmes, sections, and tracks, whereas local unit-specific sparse graphs are retained only as robustness outputs.
+Step~7 now follows the data-driven design in \texttt{data\_driven.tex}. The selection problem is no longer framed as a topology heuristic based on bootstrap edge Jaccard, susceptibility, or a pooled fallback rule. Instead, for each aggregation level separately, the workflow jointly selects:
+\begin{itemize}
+    \item the semantic representation; and
+    \item the graph cutoff.
+\end{itemize}
 
-Let
-\[
-\mathcal{R}_{\mathrm{spec}}
-=
-\{\texttt{name\_only},\texttt{fusion},\texttt{concat}\}
-\]
-denote the set of candidate representation families in the methodological specification. For each family \(r\in\mathcal{R}_{\mathrm{spec}}\), Step~6 fixes a pooled reference form, so that detailed and non-detailed files are no longer treated as separate substantive representations at this stage.
+The aggregation levels are \texttt{pooled}, \texttt{track}, \texttt{section}, \texttt{programme}, and \texttt{programme\_year}. The candidate semantic representations are \texttt{name\_only} and \texttt{concat} (implemented from the Step~6 \texttt{name\_description} weights). Selection is performed on the frozen no-merge node universe inherited from Steps~4 and~5.
 
-In the current implementation, however, the set of families available on disk is a subset of the full specification. We therefore distinguish the available family set
-\[
-\mathcal{R}_{\mathrm{avail}}
-\subseteq
-\mathcal{R}_{\mathrm{spec}}.
-\]
-In the present run,
-\[
-\mathcal{R}_{\mathrm{avail}}
-=
-\{\texttt{name\_only},\texttt{concat}\}.
-\]
-The concatenated name-plus-description representation is produced upstream under the source label \texttt{name\_description} and is exported in Step~7 under the family label \texttt{concat}. The family \texttt{fusion} remains part of the methodological specification but is not available in the current run.
+For each level and representation, the candidate threshold set is the set of distinct observed Step~6 edge weights at that level. The selection objective is the cross-validated skill score described in \texttt{data\_driven.tex}: holdout edge retention is compared against a holdout base-rate benchmark using log-loss, and the best representation-threshold pair is chosen separately for each level.
 
-For each available family \(r\in\mathcal{R}_{\mathrm{avail}}\), let
-\[
-G_{\mathrm{ref}}^{(r)}
-=
-\bigl(
-V^{(\texttt{all\_tracks})},
-E^{(r)},
-w^{(r)}
-\bigr)
-\]
-denote the pooled weighted candidate graph built on the common all-tracks node universe and on the reference form selected earlier.
+The practical implementation keeps the Step~6 edge weights fixed and resamples at the occurrence level through node-presence variation. Bootstrap edge-retention probabilities are computed analytically from train-fold occurrence counts rather than estimated by Monte Carlo simulation. This is exact for units in which each node is supported by a single occurrence and an approximation for the small subset of units with collapsed repeated occurrences.
 
-For each family \(r\), the set of candidate thresholds is defined as the set of unique observed edge weights,
-\[
-\Theta^{(r)}
-=
-\{\,w^{(r)}_{ij} : \{i,j\}\in E^{(r)}\,\}.
-\]
-For a given threshold \(\tau\in\Theta^{(r)}\), the thresholded pooled graph is
-\[
-G_{\mathrm{ref},\tau}^{(r)}
-=
-\bigl(
-V^{(\texttt{all\_tracks})},
-E_{\tau}^{(r)},
-w_{\tau}^{(r)}
-\bigr),
-\]
-with
-\[
-E_{\tau}^{(r)}
-=
-\bigl\{
-\{i,j\}\in E^{(r)} : w^{(r)}_{ij}\ge \tau
-\bigr\},
-\]
-and where surviving edges retain their original weights. The associated binary version is defined by
-\[
-A_{\tau,ij}^{(r)}
-=
-\mathbbm{1}\!\left(w^{(r)}_{ij}\ge \tau\right).
-\]
-
-As in the previous methodological record, threshold selection is based on the susceptibility of finite connected components after excluding the largest one. Let
-\[
-C_1^{(r)}(\tau),C_2^{(r)}(\tau),\dots,C_{K(\tau)}^{(r)}(\tau)
-\]
-denote the connected components of \(G_{\mathrm{ref},\tau}^{(r)}\) ordered by size, with
-\[
-|C_1^{(r)}(\tau)|\ge |C_2^{(r)}(\tau)|\ge \cdots.
-\]
-For each component size \(s\), define
-\[
-n_s^{(r)}(\tau)
-=
-\#\bigl\{k\ge 2 : |C_k^{(r)}(\tau)|=s\bigr\},
-\]
-that is, the number of finite components of size \(s\) after excluding the largest connected component. The susceptibility curve is then
-\[
-\chi^{(r)}(\tau)
-=
-\frac{\sum_s s^2 n_s^{(r)}(\tau)}
-{\sum_s s\, n_s^{(r)}(\tau)},
-\]
-with the convention that \(\chi^{(r)}(\tau)=0\) whenever no finite components remain outside the largest component.
-
-The set of susceptibility-maximizing thresholds for family \(r\) is
-\[
-\mathcal{M}_r
-=
-\arg\max_{\tau\in\Theta^{(r)}} \chi^{(r)}(\tau).
-\]
-Because tied maxima may occur, the restarted workflow does not automatically choose the sparsest maximizer. Instead, tie resolution is performed through a pooled-reference usability rule. Let
-\[
-\lambda_r(\tau)
-=
-\frac{|C_1^{(r)}(\tau)|}{|V^{(\texttt{all\_tracks})}|}
-\]
-denote the largest-connected-component share, and let
-\[
-\iota_r(\tau)
-=
-\frac{|I^{(r)}(\tau)|}{|V^{(\texttt{all\_tracks})}|}
-\]
-denote the isolate share at threshold \(\tau\), where \(I^{(r)}(\tau)\) is the set of isolated nodes in \(G_{\mathrm{ref},\tau}^{(r)}\). Define the set of admissible maximizers
-\[
-\mathcal{U}_r
-=
-\bigl\{
-\tau\in\mathcal{M}_r :
-\lambda_r(\tau)\ge \lambda_{\min}
-\ \text{and}\
-\iota_r(\tau)\le \iota_{\max}
-\bigr\},
-\]
-where \(\lambda_{\min}\) and \(\iota_{\max}\) are fixed \emph{ex ante}. The operational pooled cutoff for family \(r\) is then defined as
-\[
-\tau_r^\ast
-=
-\begin{cases}
-\max \mathcal{U}_r, & \text{if } \mathcal{U}_r\neq\varnothing,\\[6pt]
-\min \mathcal{M}_r, & \text{if } \mathcal{U}_r=\varnothing.
-\end{cases}
-\]
-Thus, whenever susceptibility ties occur, the retained cutoff is the largest maximizing threshold that still satisfies the pooled usability constraints; if none of the maximizing thresholds satisfies these constraints, the least aggressive maximizing threshold is selected. This fallback preserves the topological-transition logic while avoiding unnecessary over-sparsification within the maximizing set.
-
-The resulting pooled sparse reference graph for family \(r\) is
-\[
-H_{\mathrm{all}}^{(r)}
-=
-G_{\mathrm{ref},\tau_r^\ast}^{(r)}.
-\]
-This graph is the primary sparse object used in the subsequent representation-comparison step. All lower-level analytical units are then obtained as induced subgraphs of this same pooled sparse reference graph. Let \(V_t\), \(V_p\), and \(V_{p,y}\) denote, respectively, the node sets associated with track \(t\), programme \(p\), and programme-year unit \((p,y)\). The corresponding sparse graphs are defined as
-\[
-H_t^{(r)}=H_{\mathrm{all}}^{(r)}[V_t],
-\qquad
-H_p^{(r)}=H_{\mathrm{all}}^{(r)}[V_p],
-\qquad
-H_{p,y}^{(r)}=H_{\mathrm{all}}^{(r)}[V_{p,y}],
-\]
-where \(H[\cdot]\) denotes node-induced subgraph extraction. Because all of these graphs are inherited from the same thresholded pooled universe, they remain directly comparable across tracks, programmes, sections, and years.
-
-For diagnostic purposes only, the same susceptibility procedure may also be run separately within each analytical unit \(A\). Let
-\[
-\tau_{A,\mathrm{diag}}^{(r)}
-\]
-denote the local susceptibility cutoff obtained for unit \(A\) under family \(r\), and let
-\[
-H_{A,\mathrm{diag}}^{(r)}
-\]
-be the corresponding locally thresholded graph. These local sparse graphs are retained as robustness outputs and may be used to assess how sensitive the results are to local thresholding. However, they are not used as the primary basis for cross-unit substantive comparison, since unit-specific thresholds would confound curricular differences with sparsification differences.
-
-For each available family \(r\in\mathcal{R}_{\mathrm{avail}}\), the following pooled Step~7 diagnostics are retained:
-\[
-\tau_r^\ast,\qquad
-\chi^{(r)}(\tau_r^\ast),\qquad
-|\mathcal{M}_r|,\qquad
-|E(H_{\mathrm{all}}^{(r)})|,\qquad
-\lambda_r(\tau_r^\ast),\qquad
-\iota_r(\tau_r^\ast),
-\]
-together with the connected-node share
-\[
-\nu_r
-=
-\frac{|V^{(\texttt{all\_tracks})}|-|I^{(r)}(\tau_r^\ast)|}
-{|V^{(\texttt{all\_tracks})}|},
-\]
-the retained-edge proportion, and the full susceptibility curve. These quantities provide the direct input for the representation decision in Step~8.
-
-The output of Step~7 therefore consists of two layers. The first is the primary pooled-reference sparse graph family
-\[
-\Bigl\{
-H_{\mathrm{all}}^{(r)},\,
-H_t^{(r)},\,
-H_p^{(r)},\,
-H_{p,y}^{(r)}
-\Bigr\}_{r\in\mathcal{R}_{\mathrm{avail}}},
-\]
-which forms the comparison-safe basis for the representation decision and all later substantive analyses. The second is a diagnostic family of locally thresholded unit-specific graphs, retained only for robustness assessment. This separation ensures that the main pipeline preserves comparability while still documenting the behavior of the susceptibility rule at the local level.
+If the best skill at a level is strictly greater than zero, the selected output for that level is a thresholded sparse graph. If the best skill does not exceed zero, the automatic decision is to retain the full weighted graph for that level. Step~7 therefore returns a final selected graph family, not only a sparse-only family.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step7_outputs}
 
-The implemented Step~7 writes both pooled-reference and local-diagnostic outputs under \texttt{outputs/graphs\_sparse}. The current file set is:
+The current Step~7 produces:
 \begin{itemize}
-    \item \texttt{07\_pooled\_reference\_cutoffs.csv}
-    \item \texttt{07\_pooled\_reference\_susceptibility\_curves.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graphs\_all\_tracks.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graphs\_sections.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graphs\_tracks.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graphs\_programmes.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graphs\_programme\_years.csv}
-    \item \texttt{07\_pooled\_reference\_sparse\_graph\_summary.csv}
-    \item \texttt{07\_local\_diagnostic\_cutoffs.csv}
-    \item \texttt{07\_local\_diagnostic\_susceptibility\_curves.csv}
-    \item \texttt{07\_local\_diagnostic\_sparse\_graphs\_sections.csv}
-    \item \texttt{07\_local\_diagnostic\_sparse\_graphs\_tracks.csv}
-    \item \texttt{07\_local\_diagnostic\_sparse\_graphs\_programmes.csv}
-    \item \texttt{07\_local\_diagnostic\_sparse\_graphs\_programme\_years.csv}
-    \item \texttt{07\_local\_diagnostic\_summary.csv}
-    \item \texttt{07\_step7\_decision\_log.csv}
+    \item \texttt{07\_levelwise\_model\_selection\_surface.csv}
+    \item \texttt{07\_levelwise\_selected\_models.csv}
+    \item \texttt{07\_selected\_graphs\_pooled.csv}
+    \item \texttt{07\_selected\_graphs\_tracks.csv}
+    \item \texttt{07\_selected\_graphs\_sections.csv}
+    \item \texttt{07\_selected\_graphs\_programmes.csv}
+    \item \texttt{07\_selected\_graphs\_programme\_years.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_pooled.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_tracks.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_sections.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_programmes.csv}
+    \item \texttt{07\_edge\_selection\_probabilities\_programme\_years.csv}
+    \item \texttt{07\_selected\_graph\_summary.csv}
+    \item \texttt{07\_selection\_decision\_log.csv}
 \end{itemize}
-
-The pooled-reference cutoff table contains one selected cutoff per available representation family. The pooled-reference summary table contains one row for each exported comparison-safe sparse graph: the all-tracks graph plus the induced section, track, programme, and programme-year subgraphs. The local-diagnostic cutoff and summary tables contain one row for each locally thresholded lower-level unit graph. The file \texttt{07\_step7\_decision\_log.csv} is an implementation log recording the threshold-selection path and fallback behavior within Step~7; it is not the formal representation decision matrix, which is introduced only in Step~8.
 
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step7_implementation_note}
 
-The current run processed the two available representation families \texttt{name\_only} and \texttt{concat}. The upstream label \texttt{name\_description} is mapped to the Step~7 family label \texttt{concat}; \texttt{fusion} is not available in the present pipeline state.
-
-The fixed pooled-reference usability parameters used in the current implementation are:
+The current run selected the following level-wise models:
 \begin{itemize}
-    \item \(\lambda_{\min}=0.90\)
-    \item \(\iota_{\max}=0.10\)
-\end{itemize}
-These values are deliberately strict and act as an admissibility screen within the set of susceptibility maximizers. In the present run, they do not admit any maximizing threshold for either available family, so the fallback branch of the rule is activated in both cases.
-
-The implemented program wrote:
-\begin{itemize}
-    \item 2 pooled-reference cutoffs;
-    \item 341{,}141 pooled-reference susceptibility-curve rows;
-    \item 474{,}034 local-diagnostic susceptibility-curve rows;
-    \item 126 pooled-reference sparse-graph summary rows;
-    \item 124 local-diagnostic summary rows.
+    \item pooled: \texttt{name\_only} at threshold 0.814399, with \texttt{sparsification\_supported = TRUE};
+    \item track: \texttt{name\_only} at threshold 0.819634, with \texttt{sparsification\_supported = FALSE};
+    \item section: \texttt{name\_only} at threshold 0.831524, with \texttt{sparsification\_supported = FALSE};
+    \item programme: \texttt{concat} at threshold 0.879671, with \texttt{sparsification\_supported = FALSE};
+    \item programme-year: \texttt{concat} at threshold 0.790938, with \texttt{sparsification\_supported = FALSE}.
 \end{itemize}
 
-The selected pooled-reference cutoffs in the current run are:
+This means that, in the present run, only the pooled graph is exported as a thresholded sparse graph. All other levels revert to their full weighted graphs because no thresholded model outperformed the holdout base-rate benchmark. The selected graph summary therefore contains:
 \begin{itemize}
-    \item \texttt{name\_only}: \(\tau^\ast = 0.585136\)
-    \item \texttt{concat}: \(\tau^\ast = 0.519089\)
+    \item 1 pooled thresholded graph;
+    \item 2 track full weighted graphs;
+    \item 13 section full weighted graphs;
+    \item 14 programme full weighted graphs;
+    \item 33 programme-year full weighted graphs.
 \end{itemize}
 
-In both cases the admissible-maximizer set \(\mathcal{U}_r\) is empty under the current \((\lambda_{\min},\iota_{\max})\) rule, so the selected pooled cutoff is the least aggressive susceptibility maximizer rather than the largest admissible maximizer. The resulting pooled sparse graphs are therefore still fragmented in the current run. For the selected pooled thresholds, the retained pooled graphs have:
-\begin{itemize}
-    \item \texttt{name\_only}: 379 retained pooled edges, largest-component share \(0.0791\), isolate share \(0.4812\)
-    \item \texttt{concat}: 739 retained pooled edges, largest-component share \(0.2681\), isolate share \(0.2534\)
-\end{itemize}
-
-The local-diagnostic cutoffs range from \(0.294399\) to \(0.613096\) across sections, tracks, programmes, and programme-year units. These local graphs are retained only for robustness comparison; the comparison-safe graph family used in the next step remains the pooled-reference family induced from the two pooled cutoffs above.
+The pooled selected graph retains only 4 edges in the current run. The later descriptive atlas and final export package therefore inherit a mixed graph family: one thresholded pooled graph and full weighted graphs at the remaining aggregation levels.

@@ -3,12 +3,15 @@ using System.Text;
 using System.Text.Json;
 
 var repoRoot = Directory.GetCurrentDirectory();
-var inputPath = Path.Combine(repoRoot, "data_processed", "01_unique_skills_vectors.csv");
+var inputPath = Path.Combine(repoRoot, "data_processed", "01_unique_textual_instances_vectors.csv");
 var outputDir = Path.Combine(repoRoot, "outputs", "similarity_tables");
+
+const double DefaultScreeningCutoffNameOnly = 0.70622;
+const double DefaultScreeningCutoffNameDescription = 0.701394;
 
 if (!File.Exists(inputPath))
 {
-    throw new FileNotFoundException($"Unique skills base file not found at '{inputPath}'.");
+    throw new FileNotFoundException($"Unique textual-instance base file not found at '{inputPath}'.");
 }
 
 Directory.CreateDirectory(outputDir);
@@ -16,121 +19,161 @@ Directory.CreateDirectory(outputDir);
 var baseRows = ReadBaseRows(inputPath);
 if (baseRows.Count == 0)
 {
-    throw new InvalidOperationException("The unique skills base file is empty.");
+    throw new InvalidOperationException("The unique textual-instance base file is empty.");
 }
 
-var skills = baseRows
-    .OrderBy(row => row.Name, StringComparer.Ordinal)
-    .Select((row, index) => new UniqueSkill(
-        SkillId: $"SK_{index + 1:D4}",
+var instances = baseRows
+    .OrderBy(row => row.TextInstanceId, StringComparer.Ordinal)
+    .Select(row => new TextInstance(
+        TextInstanceId: row.TextInstanceId,
         Name: row.Name,
-        NameVector: ParseVector(row.NameVectorText, "name_vector", row.Name),
-        DescriptionVector: ParseVector(row.DescriptionVectorText, "description_vector", row.Name)
-    ))
+        Description: row.Description,
+        RequiresManualValidation: ParseBoolean(row.RequiresManualValidationText),
+        NameVector: ParseVector(row.NameVectorText, "name_vector", row.TextInstanceId),
+        DescriptionVector: ParseVector(row.DescriptionVectorText, "description_vector", row.TextInstanceId)))
     .ToList();
 
-ValidateDimensions(skills);
+ValidateDimensions(instances);
 
-Console.WriteLine($"Loaded {skills.Count.ToString(CultureInfo.InvariantCulture)} unique skill rows.");
+var normalizedNameVectors = instances
+    .Select(instance => NormalizeVector(instance.NameVector, "name_vector", instance.TextInstanceId))
+    .ToArray();
+var normalizedDescriptionVectors = instances
+    .Select(instance => NormalizeVector(instance.DescriptionVector, "description_vector", instance.TextInstanceId))
+    .ToArray();
 
-var exactNameGroups = skills
-    .GroupBy(skill => skill.Name, StringComparer.Ordinal)
-    .Where(group => group.Count() > 1)
-    .OrderByDescending(group => group.Count())
-    .ThenBy(group => group.Key, StringComparer.Ordinal)
-    .ToList();
+var pairwisePath = Path.Combine(outputDir, "02_candidate_pairwise_similarity.csv");
+var summaryPath = Path.Combine(outputDir, "02_candidate_screening_summary.csv");
+var cutoffsPath = Path.Combine(outputDir, "02_screening_cutoff_selection.csv");
+var exactNamePath = Path.Combine(outputDir, "02_exact_name_candidate_stratum.csv");
+var calibrationTemplatePath = Path.Combine(outputDir, "02_screening_calibration_template.csv");
 
-var exactNameGroupsPath = Path.Combine(outputDir, "02_exact_name_groups.csv");
-using (var writer = new StreamWriter(exactNameGroupsPath, false, new UTF8Encoding(false)))
+var exactNamePairs = new List<CandidatePair>();
+var allPairs = new List<CandidatePair>();
+var nameOnlySimilarities = new List<double>();
+var combinedSimilarities = new List<double>();
+
+long pairCounter = 0;
+for (var leftIndex = 0; leftIndex < instances.Count; leftIndex += 1)
 {
-    WriteCsvRow(writer, "exact_name_group_id", "name", "n_skills", "skill_ids");
+    var leftInstance = instances[leftIndex];
+    var leftNameVector = normalizedNameVectors[leftIndex];
+    var leftDescriptionVector = normalizedDescriptionVectors[leftIndex];
 
-    for (var groupIndex = 0; groupIndex < exactNameGroups.Count; groupIndex += 1)
+    for (var rightIndex = leftIndex + 1; rightIndex < instances.Count; rightIndex += 1)
     {
-        var group = exactNameGroups[groupIndex].ToList();
-        WriteCsvRow(
-            writer,
-            $"ENG_{groupIndex + 1:D4}",
-            group[0].Name,
-            group.Count.ToString(CultureInfo.InvariantCulture),
-            string.Join("; ", group.Select(skill => skill.SkillId))
-        );
+        var rightInstance = instances[rightIndex];
+        var cosineNameOnly = Dot(leftNameVector, normalizedNameVectors[rightIndex]);
+        var cosineNameDescription =
+            (cosineNameOnly + Dot(leftDescriptionVector, normalizedDescriptionVectors[rightIndex])) / 2.0;
+
+        pairCounter += 1;
+
+        var exactNameMatch = string.Equals(leftInstance.Name, rightInstance.Name, StringComparison.Ordinal);
+        var exactDescriptionMatch = string.Equals(leftInstance.Description, rightInstance.Description, StringComparison.Ordinal);
+        var reviewStratum = exactNameMatch ? "exact_name_review_stratum" : "different_name_review_stratum";
+        var requiresManualValidation = leftInstance.RequiresManualValidation || rightInstance.RequiresManualValidation;
+
+        var pair = new CandidatePair(
+            PairId: $"PAIR_{pairCounter:D6}",
+            TextInstanceId1: leftInstance.TextInstanceId,
+            TextInstanceId2: rightInstance.TextInstanceId,
+            Name1: leftInstance.Name,
+            Description1: leftInstance.Description,
+            Name2: rightInstance.Name,
+            Description2: rightInstance.Description,
+            ExactNameMatch: exactNameMatch,
+            ExactDescriptionMatch: exactDescriptionMatch,
+            ReviewStratum: reviewStratum,
+            RequiresManualValidation: requiresManualValidation,
+            CosineNameOnly: cosineNameOnly,
+            CosineNameDescription: cosineNameDescription);
+
+        allPairs.Add(pair);
+        if (exactNameMatch)
+        {
+            exactNamePairs.Add(pair);
+        }
+
+        nameOnlySimilarities.Add(cosineNameOnly);
+        combinedSimilarities.Add(cosineNameDescription);
     }
 }
 
-var totalUnorderedPairs = (long)skills.Count * (skills.Count - 1) / 2;
-var sameNamePairCount = exactNameGroups
-    .Select(group => (long)group.Count() * (group.Count() - 1) / 2)
-    .Sum();
-var screenedPairCount = totalUnorderedPairs - sameNamePairCount;
-
-var normalizedNameVectors = skills
-    .Select(skill => NormalizeVector(skill.NameVector, "name_vector", skill.Name))
-    .ToArray();
-var normalizedDescriptionVectors = skills
-    .Select(skill => NormalizeVector(skill.DescriptionVector, "description_vector", skill.Name))
-    .ToArray();
-
-var nameOnlySimilarities = new List<double>(checked((int)screenedPairCount));
-var combinedSimilarities = new List<double>(checked((int)screenedPairCount));
-
-var pairwisePath = Path.Combine(outputDir, "02_global_pairwise_similarity.csv");
-using (var writer = new StreamWriter(pairwisePath, false, new UTF8Encoding(false)))
+using (var writer = CreateWriter(pairwisePath))
 {
-    WriteCsvRow(
-        writer,
+    WriteCsvRow(writer, new[]
+    {
         "pair_id",
-        "skill_id_1",
-        "skill_id_2",
+        "text_instance_id_1",
+        "text_instance_id_2",
         "name_1",
+        "description_1",
         "name_2",
+        "description_2",
+        "exact_name_match",
+        "exact_description_match",
+        "review_stratum",
+        "requires_manual_validation",
         "cosine_name_only",
         "cosine_name_description"
-    );
+    });
 
-    long pairCounter = 0;
-    for (var leftIndex = 0; leftIndex < skills.Count; leftIndex += 1)
+    foreach (var pair in allPairs)
     {
-        var leftSkill = skills[leftIndex];
-        var leftNameVector = normalizedNameVectors[leftIndex];
-        var leftDescriptionVector = normalizedDescriptionVectors[leftIndex];
-
-        for (var rightIndex = leftIndex + 1; rightIndex < skills.Count; rightIndex += 1)
+        WriteCsvRow(writer, new[]
         {
-            var rightSkill = skills[rightIndex];
-            if (string.Equals(leftSkill.Name, rightSkill.Name, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var cosineNameOnly = Dot(leftNameVector, normalizedNameVectors[rightIndex]);
-
-            // For equal-length sub-vectors, cosine over the normalized concatenation is
-            // equivalent to the average of the normalized name and description cosines.
-            var cosineNameDescription =
-                (cosineNameOnly + Dot(leftDescriptionVector, normalizedDescriptionVectors[rightIndex])) / 2.0;
-
-            pairCounter += 1;
-            nameOnlySimilarities.Add(cosineNameOnly);
-            combinedSimilarities.Add(cosineNameDescription);
-
-            WriteCsvRow(
-                writer,
-                $"PAIR_{pairCounter:D6}",
-                leftSkill.SkillId,
-                rightSkill.SkillId,
-                leftSkill.Name,
-                rightSkill.Name,
-                FormatDouble(cosineNameOnly),
-                FormatDouble(cosineNameDescription)
-            );
-        }
+            pair.PairId,
+            pair.TextInstanceId1,
+            pair.TextInstanceId2,
+            pair.Name1,
+            pair.Description1,
+            pair.Name2,
+            pair.Description2,
+            FormatBoolean(pair.ExactNameMatch),
+            FormatBoolean(pair.ExactDescriptionMatch),
+            pair.ReviewStratum,
+            FormatBoolean(pair.RequiresManualValidation),
+            FormatDouble(pair.CosineNameOnly),
+            FormatDouble(pair.CosineNameDescription)
+        });
     }
 }
 
-if (nameOnlySimilarities.Count != screenedPairCount || combinedSimilarities.Count != screenedPairCount)
+using (var writer = CreateWriter(exactNamePath))
 {
-    throw new InvalidOperationException("The computed pair count does not match the expected screened pair count.");
+    WriteCsvRow(writer, new[]
+    {
+        "pair_id",
+        "text_instance_id_1",
+        "text_instance_id_2",
+        "name_1",
+        "description_1",
+        "name_2",
+        "description_2",
+        "exact_description_match",
+        "requires_manual_validation",
+        "cosine_name_only",
+        "cosine_name_description"
+    });
+
+    foreach (var pair in exactNamePairs)
+    {
+        WriteCsvRow(writer, new[]
+        {
+            pair.PairId,
+            pair.TextInstanceId1,
+            pair.TextInstanceId2,
+            pair.Name1,
+            pair.Description1,
+            pair.Name2,
+            pair.Description2,
+            FormatBoolean(pair.ExactDescriptionMatch),
+            FormatBoolean(pair.RequiresManualValidation),
+            FormatDouble(pair.CosineNameOnly),
+            FormatDouble(pair.CosineNameDescription)
+        });
+    }
 }
 
 var summaryRows = new[]
@@ -139,11 +182,10 @@ var summaryRows = new[]
     BuildSummaryRow("name_description", combinedSimilarities)
 };
 
-var summaryPath = Path.Combine(outputDir, "02_similarity_summary.csv");
-using (var writer = new StreamWriter(summaryPath, false, new UTF8Encoding(false)))
+using (var writer = CreateWriter(summaryPath))
 {
-    WriteCsvRow(
-        writer,
+    WriteCsvRow(writer, new[]
+    {
         "representation",
         "n_pairs",
         "similarity_min",
@@ -155,12 +197,12 @@ using (var writer = new StreamWriter(summaryPath, false, new UTF8Encoding(false)
         "similarity_p95",
         "similarity_max",
         "similarity_std"
-    );
+    });
 
     foreach (var row in summaryRows)
     {
-        WriteCsvRow(
-            writer,
+        WriteCsvRow(writer, new[]
+        {
             row.Representation,
             row.Count.ToString(CultureInfo.InvariantCulture),
             FormatDouble(row.Min),
@@ -172,45 +214,101 @@ using (var writer = new StreamWriter(summaryPath, false, new UTF8Encoding(false)
             FormatDouble(row.P95),
             FormatDouble(row.Max),
             FormatDouble(row.StdDev)
-        );
+        });
     }
 }
 
-var cutoffSelectionPath = Path.Combine(outputDir, "02_cutoff_selection.csv");
-using (var writer = new StreamWriter(cutoffSelectionPath, false, new UTF8Encoding(false)))
+using (var writer = CreateWriter(cutoffsPath))
 {
-    WriteCsvRow(
-        writer,
-        "chosen_cutoff_name_only",
-        "chosen_cutoff_name_description",
-        "chosen_representation",
+    WriteCsvRow(writer, new[]
+    {
+        "screening_cutoff_name_only",
+        "screening_cutoff_name_description",
+        "cutoff_source",
+        "cutoff_status",
         "notes"
-    );
-    WriteCsvRow(
-        writer,
-        string.Empty,
-        string.Empty,
-        string.Empty,
-        "Base file is already deduplicated by exact skill name; fill the chosen cutoffs after inspecting the pairwise and summary files."
-    );
+    });
+
+    WriteCsvRow(writer, new[]
+    {
+        FormatDouble(DefaultScreeningCutoffNameOnly),
+        FormatDouble(DefaultScreeningCutoffNameDescription),
+        "analyst_fixed_provisional",
+        "pending_pilot_calibration",
+        "These are provisional screening cutoffs used only to form the Step 3 manual-review candidate list. Final graph selection is deferred to Steps 7 and 8."
+    });
 }
 
-Console.WriteLine($"Exact-name groups: {exactNameGroups.Count.ToString(CultureInfo.InvariantCulture)}");
-Console.WriteLine($"Same-name unordered pairs excluded: {sameNamePairCount.ToString(CultureInfo.InvariantCulture)}");
-Console.WriteLine($"Different-name unordered pairs written: {screenedPairCount.ToString(CultureInfo.InvariantCulture)}");
+var calibrationPairs = BuildCalibrationTemplate(allPairs);
+using (var writer = CreateWriter(calibrationTemplatePath))
+{
+    WriteCsvRow(writer, new[]
+    {
+        "pair_id",
+        "text_instance_id_1",
+        "text_instance_id_2",
+        "name_1",
+        "description_1",
+        "name_2",
+        "description_2",
+        "review_stratum",
+        "cosine_name_only",
+        "cosine_name_description",
+        "max_similarity",
+        "pilot_label",
+        "pilot_notes"
+    });
+
+    foreach (var pair in calibrationPairs)
+    {
+        var maxSimilarity = Math.Max(pair.CosineNameOnly, pair.CosineNameDescription);
+        WriteCsvRow(writer, new[]
+        {
+            pair.PairId,
+            pair.TextInstanceId1,
+            pair.TextInstanceId2,
+            pair.Name1,
+            pair.Description1,
+            pair.Name2,
+            pair.Description2,
+            pair.ReviewStratum,
+            FormatDouble(pair.CosineNameOnly),
+            FormatDouble(pair.CosineNameDescription),
+            FormatDouble(maxSimilarity),
+            string.Empty,
+            string.Empty
+        });
+    }
+}
+
+Console.WriteLine($"Loaded textual instances: {instances.Count.ToString(CultureInfo.InvariantCulture)}");
+Console.WriteLine($"Candidate pairs written: {allPairs.Count.ToString(CultureInfo.InvariantCulture)}");
+Console.WriteLine($"Exact-name review-stratum pairs: {exactNamePairs.Count.ToString(CultureInfo.InvariantCulture)}");
+Console.WriteLine($"Calibration template rows: {calibrationPairs.Count.ToString(CultureInfo.InvariantCulture)}");
 
 static List<BaseRow> ReadBaseRows(string path)
 {
     using var reader = new StreamReader(path);
-    var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("The unique skills base file has no header row.");
+    var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("The unique textual-instance base file has no header row.");
     var header = ParseCsvLine(headerLine);
+    var index = header
+        .Select((name, position) => new { name, position })
+        .ToDictionary(item => item.name, item => item.position, StringComparer.OrdinalIgnoreCase);
 
-    if (header.Count != 3 ||
-        !string.Equals(header[0], "name", StringComparison.OrdinalIgnoreCase) ||
-        !string.Equals(header[1], "name_vector", StringComparison.OrdinalIgnoreCase) ||
-        !string.Equals(header[2], "description_vector", StringComparison.OrdinalIgnoreCase))
+    foreach (var requiredColumn in new[]
     {
-        throw new InvalidOperationException("Unexpected header in the unique skills base file. Expected: name, name_vector, description_vector.");
+        "text_instance_id",
+        "name",
+        "description",
+        "requires_manual_validation",
+        "name_vector",
+        "description_vector"
+    })
+    {
+        if (!index.ContainsKey(requiredColumn))
+        {
+            throw new InvalidOperationException($"Expected column '{requiredColumn}' in the unique textual-instance base file.");
+        }
     }
 
     var rows = new List<BaseRow>();
@@ -223,16 +321,65 @@ static List<BaseRow> ReadBaseRows(string path)
         }
 
         var fields = ParseCsvLine(line);
-        if (fields.Count != 3)
-        {
-            throw new InvalidOperationException($"Expected 3 columns in the unique skills base file, found {fields.Count.ToString(CultureInfo.InvariantCulture)}.");
-        }
-
-        rows.Add(new BaseRow(fields[0], fields[1], fields[2]));
+        rows.Add(new BaseRow(
+            TextInstanceId: GetField(fields, index, "text_instance_id"),
+            Name: GetField(fields, index, "name"),
+            Description: GetField(fields, index, "description"),
+            RequiresManualValidationText: GetField(fields, index, "requires_manual_validation"),
+            NameVectorText: GetField(fields, index, "name_vector"),
+            DescriptionVectorText: GetField(fields, index, "description_vector")));
     }
 
     return rows;
 }
+
+static string GetField(IReadOnlyList<string> fields, IReadOnlyDictionary<string, int> index, string columnName)
+{
+    if (!index.TryGetValue(columnName, out var position))
+    {
+        throw new InvalidOperationException($"Missing required column '{columnName}'.");
+    }
+
+    return position < fields.Count ? fields[position] : string.Empty;
+}
+
+static List<CandidatePair> BuildCalibrationTemplate(IReadOnlyList<CandidatePair> allPairs)
+{
+    var candidates = allPairs
+        .Select(pair => new
+        {
+            Pair = pair,
+            MaxSimilarity = Math.Max(pair.CosineNameOnly, pair.CosineNameDescription),
+            SimilarityBin = GetSimilarityBin(Math.Max(pair.CosineNameOnly, pair.CosineNameDescription))
+        })
+        .GroupBy(item => new { item.Pair.ReviewStratum, item.SimilarityBin })
+        .OrderBy(group => group.Key.ReviewStratum, StringComparer.Ordinal)
+        .ThenBy(group => group.Key.SimilarityBin, StringComparer.Ordinal)
+        .SelectMany(group => group
+            .OrderByDescending(item => item.MaxSimilarity)
+            .ThenBy(item => item.Pair.PairId, StringComparer.Ordinal)
+            .Take(12)
+            .Select(item => item.Pair))
+        .DistinctBy(pair => pair.PairId)
+        .OrderBy(pair => pair.ReviewStratum, StringComparer.Ordinal)
+        .ThenByDescending(pair => Math.Max(pair.CosineNameOnly, pair.CosineNameDescription))
+        .ThenBy(pair => pair.PairId, StringComparer.Ordinal)
+        .ToList();
+
+    return candidates;
+}
+
+static string GetSimilarityBin(double similarity)
+{
+    if (similarity >= 0.90) return "0.90_to_1.00";
+    if (similarity >= 0.80) return "0.80_to_0.89";
+    if (similarity >= 0.70) return "0.70_to_0.79";
+    if (similarity >= 0.60) return "0.60_to_0.69";
+    return "below_0.60";
+}
+
+static bool ParseBoolean(string text) =>
+    string.Equals(text?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
 
 static List<string> ParseCsvLine(string line)
 {
@@ -285,37 +432,37 @@ static List<string> ParseCsvLine(string line)
     return fields;
 }
 
-static double[] ParseVector(string vectorText, string fieldName, string skillName)
+static double[] ParseVector(string vectorText, string fieldName, string instanceId)
 {
     var vector = JsonSerializer.Deserialize<double[]>(vectorText);
     if (vector is null || vector.Length == 0)
     {
-        throw new InvalidOperationException($"Skill '{skillName}' has an invalid {fieldName} value.");
+        throw new InvalidOperationException($"Text instance '{instanceId}' has an invalid {fieldName} value.");
     }
 
     return vector;
 }
 
-static void ValidateDimensions(IReadOnlyList<UniqueSkill> skills)
+static void ValidateDimensions(IReadOnlyList<TextInstance> instances)
 {
-    var expectedNameDimension = skills[0].NameVector.Length;
-    var expectedDescriptionDimension = skills[0].DescriptionVector.Length;
+    var expectedNameDimension = instances[0].NameVector.Length;
+    var expectedDescriptionDimension = instances[0].DescriptionVector.Length;
 
-    foreach (var skill in skills)
+    foreach (var instance in instances)
     {
-        if (skill.NameVector.Length != expectedNameDimension)
+        if (instance.NameVector.Length != expectedNameDimension)
         {
-            throw new InvalidOperationException($"Skill '{skill.Name}' has name_vector dimension {skill.NameVector.Length.ToString(CultureInfo.InvariantCulture)} instead of {expectedNameDimension.ToString(CultureInfo.InvariantCulture)}.");
+            throw new InvalidOperationException($"Text instance '{instance.TextInstanceId}' has name_vector dimension {instance.NameVector.Length.ToString(CultureInfo.InvariantCulture)} instead of {expectedNameDimension.ToString(CultureInfo.InvariantCulture)}.");
         }
 
-        if (skill.DescriptionVector.Length != expectedDescriptionDimension)
+        if (instance.DescriptionVector.Length != expectedDescriptionDimension)
         {
-            throw new InvalidOperationException($"Skill '{skill.Name}' has description_vector dimension {skill.DescriptionVector.Length.ToString(CultureInfo.InvariantCulture)} instead of {expectedDescriptionDimension.ToString(CultureInfo.InvariantCulture)}.");
+            throw new InvalidOperationException($"Text instance '{instance.TextInstanceId}' has description_vector dimension {instance.DescriptionVector.Length.ToString(CultureInfo.InvariantCulture)} instead of {expectedDescriptionDimension.ToString(CultureInfo.InvariantCulture)}.");
         }
     }
 }
 
-static double[] NormalizeVector(double[] vector, string fieldName, string skillName)
+static double[] NormalizeVector(double[] vector, string fieldName, string instanceId)
 {
     var squaredNorm = 0.0;
     for (var index = 0; index < vector.Length; index += 1)
@@ -325,7 +472,7 @@ static double[] NormalizeVector(double[] vector, string fieldName, string skillN
 
     if (squaredNorm <= 0.0)
     {
-        throw new InvalidOperationException($"Skill '{skillName}' has a zero-norm {fieldName}.");
+        throw new InvalidOperationException($"Text instance '{instanceId}' has a zero-norm {fieldName}.");
     }
 
     var norm = Math.Sqrt(squaredNorm);
@@ -390,8 +537,7 @@ static SimilaritySummaryRow BuildSummaryRow(string representation, List<double> 
         P90: Quantile(values, 0.90),
         P95: Quantile(values, 0.95),
         Max: max,
-        StdDev: Math.Sqrt(varianceSum / values.Count)
-    );
+        StdDev: Math.Sqrt(varianceSum / values.Count));
 }
 
 static double Quantile(IReadOnlyList<double> sortedValues, double probability)
@@ -414,10 +560,18 @@ static double Quantile(IReadOnlyList<double> sortedValues, double probability)
     return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * weight;
 }
 
-static string FormatDouble(double value) =>
-    value.ToString("F6", CultureInfo.InvariantCulture);
+static StreamWriter CreateWriter(string path)
+{
+    var directory = Path.GetDirectoryName(path);
+    if (!string.IsNullOrWhiteSpace(directory))
+    {
+        Directory.CreateDirectory(directory);
+    }
 
-static void WriteCsvRow(StreamWriter writer, params string?[] values)
+    return new StreamWriter(path, false, new UTF8Encoding(false));
+}
+
+static void WriteCsvRow(TextWriter writer, IReadOnlyList<string?> values)
 {
     writer.WriteLine(string.Join(",", values.Select(EscapeCsv)));
 }
@@ -437,9 +591,41 @@ static string EscapeCsv(string? value)
     return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 }
 
-internal sealed record BaseRow(string Name, string NameVectorText, string DescriptionVectorText);
+static string FormatDouble(double value) =>
+    value.ToString("0.######", CultureInfo.InvariantCulture);
 
-internal sealed record UniqueSkill(string SkillId, string Name, double[] NameVector, double[] DescriptionVector);
+static string FormatBoolean(bool value) => value ? "true" : "false";
+
+internal sealed record BaseRow(
+    string TextInstanceId,
+    string Name,
+    string Description,
+    string RequiresManualValidationText,
+    string NameVectorText,
+    string DescriptionVectorText);
+
+internal sealed record TextInstance(
+    string TextInstanceId,
+    string Name,
+    string Description,
+    bool RequiresManualValidation,
+    double[] NameVector,
+    double[] DescriptionVector);
+
+internal sealed record CandidatePair(
+    string PairId,
+    string TextInstanceId1,
+    string TextInstanceId2,
+    string Name1,
+    string Description1,
+    string Name2,
+    string Description2,
+    bool ExactNameMatch,
+    bool ExactDescriptionMatch,
+    string ReviewStratum,
+    bool RequiresManualValidation,
+    double CosineNameOnly,
+    double CosineNameDescription);
 
 internal sealed record SimilaritySummaryRow(
     string Representation,
@@ -452,5 +638,4 @@ internal sealed record SimilaritySummaryRow(
     double P90,
     double P95,
     double Max,
-    double StdDev
-);
+    double StdDev);

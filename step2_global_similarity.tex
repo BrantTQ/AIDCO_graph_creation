@@ -1,148 +1,65 @@
-\subsection{Step 2: Global Pairwise Similarity and Cutoff Selection}
+\subsection{Step 2: Global Candidate Screening on Unique Textual Instances}
 \label{sec:step2_global_similarity}
 
-After the data have been cleaned and validated, the next step is to compute semantic similarity across the global list of skills. At this stage, the analysis is not conducted separately by section, programme, track, or year. Instead, all skills are considered together in a single global pool. The purpose of this step is to generate a complete similarity table that will later be used to identify potential harmonization candidates.
+After Step~1 has produced a validated occurrence-level base, the next task is to screen for potentially equivalent skill labels at the global corpus level. This step is not a graph-construction step. Its purpose is to build a candidate table for later review and harmonization, not to choose the final sparse graph cutoff.
 
-Before pairwise similarity is computed, the occurrence-level output of Step~1 is converted into a deduplicated unique-skill base file. This file is named \texttt{01\_unique\_skills\_vectors.csv} and contains one row per unique skill name, with three columns: \texttt{name}, \texttt{name\_vector}, and \texttt{description\_vector}. The purpose of this intermediate file is to remove repeated skills that differ only by curricular occurrence and to ensure that the global similarity analysis is performed over a unique list of skills rather than over repeated occurrence-level rows.
+The corrected Step~2 uses \texttt{01\_unique\_textual\_instances\_vectors.csv} as its direct input. This file contains one row per unique textual instance rather than one row per unique skill name. The distinction matters methodologically: exact-name matches are no longer collapsed in advance, so the workflow does not hard-code the assumption that identical names must always correspond to the same harmonized skill. If exact-name duplicates exist, they are placed in a dedicated review stratum rather than treated as automatic matches.
 
-A simplifying rule is operationalized during the creation of this base file. Skills with exactly the same name do not need to be screened through pairwise similarity, because they are already assumed to refer to the same skill label. These exact-name matches are therefore separated from the similarity analysis and stored in a dedicated file for traceability. The pairwise similarity computation is then applied only to the rows of the unique-skill base file.
+For each unordered pair of textual instances, Step~2 computes cosine similarity under two fixed representations:
+\begin{itemize}
+    \item \texttt{name\_only}, using the normalized \texttt{name\_vector};
+    \item \texttt{name\_description}, using the normalized concatenation of \texttt{name\_vector} and \texttt{description\_vector}.
+\end{itemize}
 
-Two semantic representations are compared. The first uses only the embedding stored in \texttt{name\_vector}. The second uses a combined representation based on \texttt{name\_vector} and \texttt{description\_vector}. The combined representation should be constructed in a fixed and transparent way. A simple and consistent choice is to normalize both vectors, concatenate them, and normalize the resulting combined vector before computing similarity. This ensures that both the short skill label and the skill description contribute to the final score.
-
-The main operation of this step is the computation of cosine similarity for all unordered pairs of skills with different names. For each pair, two cosine similarity scores are recorded: one for the name-only representation and one for the combined name-plus-description representation. The result is a single global pairwise similarity table. This table is not yet a review file and does not yet imply that any two skills are equivalent. Its only purpose is to provide the quantitative basis for choosing a similarity cutoff.
-
-Once the pairwise table has been generated, the next task is descriptive inspection. The distribution of similarity scores must be summarized for both representations. This includes the minimum, maximum, mean, median, standard deviation, and selected quantiles. The goal of this inspection is practical: it allows the researcher to see where potentially meaningful candidate pairs begin to emerge and to determine a workable cutoff for manual review. At the end of this step, the researcher chooses one cutoff for the name-only similarity and one cutoff for the combined name-plus-description similarity, or decides to retain only one of the two representations for the next stage.
-
-This step therefore ends with a deliberate pause in the workflow. No skills are merged, no canonical names are assigned, and no human evaluation is performed yet. Instead, the main output is a global similarity table together with the cutoff choice that will define which candidate pairs move forward to the review stage.
-
-\paragraph{Input}
-The direct input to this step is therefore \texttt{01\_unique\_skills\_vectors.csv}. If this file does not preserve an original identifier beyond the skill name, Step~2 may assign a stable temporary \texttt{skill\_id} so that the pairwise similarity table remains uniquely indexable and reproducible.
+The result is a global screening table that records both similarity values. A separate screening-cutoff file records the current provisional thresholds that define which pairs move forward to Step~3 review. Those thresholds are explicitly described as review-screening thresholds only. Final graph sparsification is deferred to Steps~7 and~8.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step2_outputs}
 
-The outputs of Step~2 consist of the global similarity table, a record of exact-name matches, summary statistics for the similarity distributions, and a file in which the chosen cutoff values can be recorded.
-
-\paragraph{Files}
-The following core files should be produced at the end of this step:
+The corrected Step~2 produces:
 \begin{itemize}
-    \item \texttt{01\_unique\_skills\_vectors.csv}: deduplicated base file created at the start of Step~2, with one row per unique skill name and columns \texttt{name}, \texttt{name\_vector}, and \texttt{description\_vector}; this is the direct input to the global similarity estimation.
-    \item \texttt{02\_exact\_name\_groups.csv}: list of skills that share exactly the same name and therefore do not need pairwise screening.
-    \item \texttt{02\_global\_pairwise\_similarity.csv}: one global table containing all unordered skill pairs with different names and their cosine similarity scores.
-    \item \texttt{02\_similarity\_summary.csv}: summary statistics for the similarity distributions under both representations.
-    \item \texttt{02\_cutoff\_selection.csv}: file in which the chosen cutoff values are recorded after inspection of the similarity table.
+    \item \texttt{02\_candidate\_pairwise\_similarity.csv}
+    \item \texttt{02\_candidate\_screening\_summary.csv}
+    \item \texttt{02\_screening\_cutoff\_selection.csv}
+    \item \texttt{02\_exact\_name\_candidate\_stratum.csv}
+    \item \texttt{02\_screening\_calibration\_template.csv}
 \end{itemize}
 
-\paragraph{Tables to Produce}
-The following tables should be generated as part of this step.
-
-\begin{enumerate}
-    \item \textbf{Exact-name groups table.}  
-    This table records the skills that have exactly the same name during the creation of the unique-skill base file and are therefore excluded from pairwise screening.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{exact\_name\_group\_id}
-        \item \texttt{name}
-        \item \texttt{n\_skills}
-        \item \texttt{skill\_ids}
-    \end{itemize}
-
-    \item \textbf{Global pairwise similarity table.}  
-    This is the main output of the step. Each row corresponds to one unordered pair of skills with different names.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{pair\_id}
-        \item \texttt{skill\_id\_1}
-        \item \texttt{skill\_id\_2}
-        \item \texttt{name\_1}
-        \item \texttt{name\_2}
-        \item \texttt{cosine\_name\_only}
-        \item \texttt{cosine\_name\_description}
-    \end{itemize}
-    If the unique-skill base file contains only \texttt{name}, \texttt{name\_vector}, and \texttt{description\_vector}, the \texttt{skill\_id} fields may be stable temporary identifiers assigned within Step~2 for traceability.
-
-    \item \textbf{Similarity summary table.}  
-    This table summarizes the similarity distributions for both representations.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{representation}
-        \item \texttt{n\_pairs}
-        \item \texttt{similarity\_min}
-        \item \texttt{similarity\_p25}
-        \item \texttt{similarity\_median}
-        \item \texttt{similarity\_mean}
-        \item \texttt{similarity\_p75}
-        \item \texttt{similarity\_p90}
-        \item \texttt{similarity\_p95}
-        \item \texttt{similarity\_max}
-        \item \texttt{similarity\_std}
-    \end{itemize}
-
-    \item \textbf{Cutoff selection table.}  
-    This table stores the cutoff values chosen after inspection of the global similarity table.  
-    Its columns should be:
-    \begin{itemize}
-        \item \texttt{chosen\_cutoff\_name\_only}
-        \item \texttt{chosen\_cutoff\_name\_description}
-        \item \texttt{chosen\_representation}
-        \item \texttt{notes}
-    \end{itemize}
-\end{enumerate}
-
-\paragraph{Information That Should Be Recorded}
-At the end of this step, the following information should be known and explicitly documented:
-\begin{itemize}
-    \item the file used as the direct input to the global similarity calculation;
-    \item the total number of skills in the global list;
-    \item the number of exact-name groups;
-    \item the number of skills excluded from pairwise screening because of exact name matches;
-    \item the total number of unordered pairs included in the similarity table;
-    \item the distribution of cosine similarity scores for the name-only representation;
-    \item the distribution of cosine similarity scores for the combined name-plus-description representation;
-    \item whether temporary \texttt{skill\_id} values were assigned for the pairwise table;
-    \item the cutoff chosen for the name-only representation;
-    \item the cutoff chosen for the combined representation;
-    \item whether one of the two representations is preferred for the next step.
-\end{itemize}
+The pairwise table is the main output. Each row represents one unordered pair of textual instances and includes the two similarity scores plus the identifiers and labels needed for downstream review. The exact-name stratum file is retained even if empty so that the handling of exact-name cases remains explicit.
 
 \subsubsection{Fields to Fill After Concluding This Step}
 \label{sec:step2_fields_to_fill}
 
-At the end of this step, the researcher must complete \texttt{02\_cutoff\_selection.csv}. This file records the cutoff values that will be used in Step~3 to build the review table.
-
-\paragraph{File}
-\texttt{02\_cutoff\_selection.csv}
-
-\paragraph{Columns}
-The file should contain the following columns:
+The only file that may require analyst input at this stage is:
 \begin{itemize}
-    \item \texttt{chosen\_cutoff\_name\_only}
-    \item \texttt{chosen\_cutoff\_name\_description}
-    \item \texttt{chosen\_representation}
-    \item \texttt{notes}
+    \item \texttt{02\_screening\_cutoff\_selection.csv}
 \end{itemize}
 
-\paragraph{Currently Recorded Values}
-In the current run, \texttt{02\_cutoff\_selection.csv} contains the following values:
-\begin{itemize}
-    \item \texttt{chosen\_cutoff\_name\_only = 0.70622}
-    \item \texttt{chosen\_cutoff\_name\_description = 0.701394}
-    \item \texttt{chosen\_representation = both}
-    \item \texttt{notes}: Pairs are retained for review if they pass at least one of the two cutoffs.
-\end{itemize}
+In the corrected workflow, this file stores provisional screening thresholds and their status. The intended next improvement is pilot calibration on a labeled sample, because the methodological objective here is high review recall at manageable manual-review load, not direct graph optimization.
 
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step2_implementation_note}
 
-The implemented Step~2 uses \texttt{01\_unique\_skills\_vectors.csv} exactly as the direct input file. In the current workflow, this file contains only the three columns \texttt{name}, \texttt{name\_vector}, and \texttt{description\_vector}, so Step~2 assigns stable temporary identifiers of the form \texttt{SK\_0001} in order to keep the pairwise table reproducible and uniquely indexable.
-
-The current run produced \texttt{02\_exact\_name\_groups.csv}, \texttt{02\_global\_pairwise\_similarity.csv}, \texttt{02\_similarity\_summary.csv}, and \texttt{02\_cutoff\_selection.csv}. The direct input contained 895 unique skill names, which yielded 400,065 unordered different-name pairs. Because the Step~2 input file was already deduplicated by exact name, \texttt{02\_exact\_name\_groups.csv} is present only as a header-only file in the current run. This is not an error; it is simply the consequence of using a one-row-per-unique-name base file.
-
-The currently recorded summary statistics and selections are:
+The current corrected run used \texttt{01\_unique\_textual\_instances\_vectors.csv} as input and produced:
 \begin{itemize}
-    \item \texttt{similarity\_p95 = 0.315562} for \texttt{name\_only};
-    \item \texttt{similarity\_p95 = 0.305355} for \texttt{name\_description};
-    \item \texttt{chosen\_cutoff\_name\_only = 0.70622};
-    \item \texttt{chosen\_cutoff\_name\_description = 0.701394};
-    \item \texttt{chosen\_representation = both}, with the practical rule that a pair is retained if it passes at least one cutoff.
+    \item 895 textual instances;
+    \item 400,065 unordered candidate pairs;
+    \item 0 exact-name candidate-stratum pairs in the present corpus;
+    \item 48 rows in the calibration template.
 \end{itemize}
+
+The current screening summaries report:
+\begin{itemize}
+    \item \texttt{name\_only}: \texttt{p95 = 0.315562}
+    \item \texttt{name\_description}: \texttt{p95 = 0.305355}
+\end{itemize}
+
+The currently recorded screening cutoffs are:
+\begin{itemize}
+    \item \texttt{screening\_cutoff\_name\_only = 0.70622}
+    \item \texttt{screening\_cutoff\_name\_description = 0.701394}
+    \item \texttt{cutoff\_source = analyst\_fixed\_provisional}
+    \item \texttt{cutoff\_status = pending\_pilot\_calibration}
+\end{itemize}
+
+Pairs are sent to Step~3 if they pass at least one of these two screening cutoffs. This union rule is used only to form the review list and does not constitute a representation choice for graph construction.

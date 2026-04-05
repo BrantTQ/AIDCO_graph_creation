@@ -1,222 +1,28 @@
-\subsection{Step 9: Descriptive profiling and overlap analysis on the selected graph family}
+\subsection{Step 9: Descriptive Profiling and Overlap Analysis}
 \label{sec:step9}
 
-Once the primary representation family has been selected in Step~8, the next stage is to construct a descriptive atlas of the resulting curriculum graphs before moving to higher-order topological interpretation. The purpose of this step is to summarize the observable structure of the ICT curricula across the available analytical units and to quantify the extent to which skills and retained relations are shared across years, programmes, sections, and tracks.
+Step~9 builds the descriptive atlas on the frozen graph family produced by Steps~7 and~8. Because the current data-driven selector may keep a thresholded sparse graph at one level and a full weighted graph at another, the atlas now carries level-specific graph-mode metadata in addition to level-specific representation and cutoff metadata.
 
-All descriptive analyses in this step are performed on the frozen primary graph family
-\[
-\mathcal{H}^{(r^\ast)}
-=
-\Bigl\{
-H_{\mathrm{all}}^{(r^\ast)},
-H_t^{(r^\ast)},
-H_s^{(r^\ast)},
-H_p^{(r^\ast)},
-H_{p,y}^{(r^\ast)}
-\Bigr\},
-\]
-where \(H_{\mathrm{all}}^{(r^\ast)}\) is the pooled sparse graph selected in Step~8, and the remaining graphs are pooled-reference induced subgraphs at the track, section, programme, and programme-year levels. In what follows, programme-year graphs remain the primary observational layer, while the higher levels are used for aggregation and synthesis.
+The step contains four descriptive blocks:
+\begin{itemize}
+    \item graph profiles for every analytical unit;
+    \item within-programme skill recurrence across years;
+    \item programme-year progression overlap;
+    \item cross-unit overlap relative to tracks, sections, programmes, programme-years, and the pooled universe.
+\end{itemize}
 
-Let
-\[
-H_A=(V_A,E_A,w_A)
-\]
-denote the graph associated with an analytical unit \(A\), where \(V_A\) is the set of canonical skills present in \(A\), \(E_A\) is the retained undirected edge set, and \(w_A\) is the corresponding weight function inherited from the selected pooled sparse family.
-
-\paragraph{(i) Basic graph profile.}
-The first descriptive block records the basic size and sparsity characteristics of each graph. For any analytical unit \(A\), define
-\[
-n(A)=|V_A|,
-\qquad
-m(A)=|E_A|.
-\]
-The binary density is
-\[
-\mathrm{dens}(A)
-=
-\frac{2m(A)}{n(A)\bigl(n(A)-1\bigr)},
-\]
-for \(n(A)\ge 2\), and zero otherwise. The mean degree is
-\[
-\overline{k}(A)
-=
-\frac{2m(A)}{n(A)}.
-\]
-For a node \(i\in V_A\), let
-\[
-k_i(A)
-\]
-denote its degree and
-\[
-s_i(A)=\sum_{j:\{i,j\}\in E_A} w_{A,ij}
-\]
-its weighted strength. The mean strength is
-\[
-\overline{s}(A)
-=
-\frac{1}{n(A)}\sum_{i\in V_A} s_i(A).
-\]
-The isolate share is
-\[
-\mathrm{iso}(A)
-=
-\frac{1}{n(A)}
-\sum_{i\in V_A}
-\mathbbm{1}\!\left(k_i(A)=0\right),
-\]
-and the connected-node share is
-\[
-\mathrm{conn}(A)=1-\mathrm{iso}(A).
-\]
-In addition, let
-\[
-C_1(A)
-\]
-denote the largest connected component of \(H_A\). Its relative size is
-\[
-\mathrm{LCC}(A)
-=
-\frac{|C_1(A)|}{n(A)}.
-\]
-These quantities provide a first descriptive summary of how large, sparse, and connected each curriculum graph is.
-
-\paragraph{(ii) Skill recurrence across years within programmes.}
-Because the skills retain their curricular provenance, the second descriptive block summarizes how knowledge is distributed over time within each programme. Let \(\mathcal{Y}_p\) denote the year set of programme \(p\), and let
-\[
-V_{p}
-=
-\bigcup_{y\in\mathcal{Y}_p} V_{p,y}
-\]
-be the complete programme-level skill inventory. For each skill \(i\in V_p\), define its within-programme recurrence count as
-\[
-f_p(i)
-=
-\sum_{y\in\mathcal{Y}_p}
-\mathbbm{1}\!\left(i\in V_{p,y}\right).
-\]
-This count records in how many curricular years skill \(i\) appears within programme \(p\). The share of recurrent skills in programme \(p\) is then
-\[
-\mathrm{rec}(p)
-=
-\frac{1}{|V_p|}
-\sum_{i\in V_p}
-\mathbbm{1}\!\left(f_p(i)\ge 2\right).
-\]
-This quantity distinguishes programmes that revisit previously introduced skills from those whose yearly content is more weakly overlapping.
-
-\paragraph{(iii) Year-to-year overlap within programmes.}
-To study progression inside programmes, overlap is first evaluated across years within the same programme. For two years \(y_1,y_2\in\mathcal{Y}_p\), the node-level overlap is measured by the Jaccard coefficient
-\[
-J_V\bigl((p,y_1),(p,y_2)\bigr)
-=
-\frac{|V_{p,y_1}\cap V_{p,y_2}|}
-{|V_{p,y_1}\cup V_{p,y_2}|}.
-\]
-To distinguish continuity from renewal, the carryover rate from \(y_1\) to \(y_2\) is defined as
-\[
-\mathrm{carry}\bigl((p,y_1)\rightarrow(p,y_2)\bigr)
-=
-\frac{|V_{p,y_1}\cap V_{p,y_2}|}
-{|V_{p,y_1}|},
-\]
-while the introduction rate in \(y_2\) relative to \(y_1\) is
-\[
-\mathrm{intro}\bigl((p,y_1)\rightarrow(p,y_2)\bigr)
-=
-\frac{|V_{p,y_2}\setminus V_{p,y_1}|}
-{|V_{p,y_2}|}.
-\]
-Together, these quantities provide a descriptive account of curricular persistence versus novelty over time.
-
-\paragraph{(iv) Cross-unit node overlap.}
-To compare curricula at the same or different levels of aggregation, node overlap is computed for any pair of analytical units \(A\) and \(B\). The symmetric overlap is
-\[
-J_V(A,B)
-=
-\frac{|V_A\cap V_B|}{|V_A\cup V_B|},
-\]
-while the directional inclusion rate is
-\[
-\mathrm{incl}(A\rightarrow B)
-=
-\frac{|V_A\cap V_B|}{|V_A|}.
-\]
-The Jaccard coefficient quantifies the overall proportion of shared skills, whereas the inclusion rate measures the extent to which the smaller or more specific unit is contained in the other. These metrics are especially useful when comparing programme-years at the same curricular stage, programmes within the same track, sections across tracks, and each lower-level unit against the pooled universe.
-
-\paragraph{(v) Edge overlap conditional on shared skills.}
-Node overlap alone does not show whether two curricula organize their shared skills in similar ways. For two analytical units \(A\) and \(B\), define the shared skill set
-\[
-S_{A,B}=V_A\cap V_B.
-\]
-Let
-\[
-E_A^{S}
-=
-\bigl\{\{i,j\}\in E_A : i,j\in S_{A,B}\bigr\},
-\qquad
-E_B^{S}
-=
-\bigl\{\{i,j\}\in E_B : i,j\in S_{A,B}\bigr\}.
-\]
-The conditional edge overlap is then
-\[
-J_E(A,B)
-=
-\frac{|E_A^{S}\cap E_B^{S}|}
-{|E_A^{S}\cup E_B^{S}|},
-\]
-with the convention that \(J_E(A,B)=0\) whenever the denominator is zero. This measure answers a stronger question than node overlap: among the skills shared by two curricula, to what extent are the retained relations also shared?
-
-\paragraph{(vi) Weighted agreement on shared relations.}
-Because the selected family is available in weighted form, descriptive comparison also includes the agreement in edge strength on the common retained support. Let
-\[
-E_{A,B}^{\cap}
-=
-E_A^{S}\cap E_B^{S}
-\]
-be the set of shared retained edges between \(A\) and \(B\) after restricting to shared skills. Let \(\mathbf{w}_A\) and \(\mathbf{w}_B\) denote the vectors of edge weights on \(E_{A,B}^{\cap}\) in the two graphs. Whenever at least two shared edges are available, weighted agreement is summarized by the Spearman correlation
-\[
-\rho_w(A,B)
-=
-\rho_S(\mathbf{w}_A,\mathbf{w}_B).
-\]
-This coefficient captures whether the same retained relations tend to be similarly strong across curricula, even if the overall edge sets are not identical.
-
-\paragraph{(vii) Overlap summaries by unit class.}
-The overlap statistics above are aggregated into comparison matrices for the main analytical classes. Let
-\[
-\mathcal{U}
-=
-\{\texttt{tracks},\texttt{sections},\texttt{programmes},\texttt{programme\_years}\}.
-\]
-For each class \(u\in\mathcal{U}\), let \(\mathcal{A}_u\) be the set of units of that class. Then Step~9 produces, for each \(u\),
-\[
-\bigl[J_V(A,B)\bigr]_{A,B\in\mathcal{A}_u},
-\qquad
-\bigl[J_E(A,B)\bigr]_{A,B\in\mathcal{A}_u},
-\qquad
-\bigl[\rho_w(A,B)\bigr]_{A,B\in\mathcal{A}_u},
-\]
-together with directional inclusion matrices
-\[
-\bigl[\mathrm{incl}(A\rightarrow B)\bigr]_{A,B\in\mathcal{A}_u}.
-\]
-At the programme-year level, these matrices are also stratified by curricular year when appropriate, so that same-stage comparisons are not confounded with year aggregation.
-
-\paragraph{(viii) Outputs of the descriptive atlas.}
-The outputs of Step~9 are organized into four descriptive blocks. First, a graph profile table records, for every analytical unit, the node count, edge count, density, mean degree, mean strength, isolate share, connected-node share, and largest-component share. Second, a recurrence table summarizes within-programme skill persistence across years. Third, overlap and inclusion matrices quantify shared skill coverage across tracks, sections, programmes, and programme-years. Fourth, conditional edge-overlap and weighted-agreement matrices describe the similarity of retained relational structure across units.
-
-The aim of Step~9 is therefore to establish a transparent descriptive baseline on the selected graph family before introducing the more formal network measures of the next stage. By separating graph size, recurrence, content overlap, and relational agreement, this step provides the empirical foundation for the subsequent analysis of clustering, modularity, centrality, assortativity, bridge structure, and curriculum-distance metrics.
+The current implementation reads the final selected graph files from Step~7, not the retired sparse-only files. When a level has \texttt{selected\_graph\_mode = full\_weighted\_graph}, the atlas still reports graph sizes and node overlaps, but edge-overlap diagnostics are intentionally left blank because they are not substantively informative for complete weighted graphs.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step9_outputs}
 
-The implemented Step~9 writes its descriptive-atlas outputs under \texttt{outputs/descriptive\_atlas}. The current file set is:
+The current Step~9 produces:
 \begin{itemize}
     \item \texttt{09\_graph\_profile\_table.csv}
     \item \texttt{09\_programme\_skill\_recurrence\_summary.csv}
     \item \texttt{09\_programme\_skill\_recurrence\_detail.csv}
-    \item \texttt{09\_programme\_year\_progression\_overlap.csv}
+    \item \texttt{09\_programme\_year\_adjacent\_progression\_overlap.csv}
+    \item \texttt{09\_programme\_year\_progression\_overlap\_all\_pairs.csv}
     \item \texttt{09\_overlap\_matrix\_tracks.csv}
     \item \texttt{09\_overlap\_matrix\_sections.csv}
     \item \texttt{09\_overlap\_matrix\_programmes.csv}
@@ -225,50 +31,31 @@ The implemented Step~9 writes its descriptive-atlas outputs under \texttt{output
     \item \texttt{09\_descriptive\_atlas\_summary.csv}
 \end{itemize}
 
-The graph-profile table contains one row per analytical unit in the selected family. The recurrence files summarize within-programme skill persistence both at the programme level and at the individual-skill level. The overlap files are stored in long-format matrix form, with one row per unit pair and separate columns for node overlap, directional inclusion, conditional edge overlap, and weighted agreement.
-
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step9_implementation_note}
 
-The current Step~9 run uses the primary family frozen in Step~8:
+The current atlas summary reports:
 \begin{itemize}
-    \item \texttt{selected\_representation\_family = concat}
-    \item \texttt{selected\_source\_representation = name\_description}
-    \item \texttt{reference\_threshold = 0.519089}
-\end{itemize}
-
-The implemented descriptive atlas currently contains:
-\begin{itemize}
+    \item 5 frozen selection rows inherited from Step~8;
     \item 63 graph-profile rows;
-    \item 14 programme-level recurrence-summary rows;
-    \item 862 programme-skill recurrence-detail rows;
-    \item 29 within-programme year-to-year progression rows;
-    \item 1 track overlap row;
-    \item 78 section overlap rows;
-    \item 91 programme overlap rows;
-    \item 528 programme-year overlap rows;
-    \item 62 lower-unit versus pooled comparison rows.
+    \item 14 programme recurrence summaries;
+    \item 969 programme recurrence detail rows;
+    \item 19 adjacent-year progression rows;
+    \item 29 all-pairs progression rows;
+    \item 1 track-overlap row;
+    \item 78 section-overlap rows;
+    \item 91 programme-overlap rows;
+    \item 528 programme-year-overlap rows;
+    \item 62 pooled-comparison rows.
 \end{itemize}
 
-At the pooled all-tracks level, the current selected graph has:
+In the present run, Step~9 inherits a mixed graph family:
 \begin{itemize}
-    \item \(n=746\) nodes;
-    \item \(m=739\) retained edges;
-    \item density \(= 0.002659\);
-    \item mean degree \(= 1.9812\);
-    \item mean strength \(= 1.1401\);
-    \item isolate share \(= 0.2534\);
-    \item connected-node share \(= 0.7466\);
-    \item largest-component share \(= 0.2681\).
+    \item pooled: thresholded sparse graph under \texttt{name\_only};
+    \item track: full weighted graph under \texttt{name\_only};
+    \item section: full weighted graph under \texttt{name\_only};
+    \item programme: full weighted graph under \texttt{concat};
+    \item programme-year: full weighted graph under \texttt{concat}.
 \end{itemize}
 
-The recurrence summary shows substantial heterogeneity across programmes in the current run. The highest recurrent-skill shares are:
-\begin{itemize}
-    \item \texttt{MAIOU}: \(0.4167\)
-    \item \texttt{SINFO}: \(0.2931\)
-    \item \texttt{TECNO}: \(0.1748\)
-\end{itemize}
-
-The progression table currently includes all unordered year pairs within each programme, not only adjacent years. The programme-year overlap table also includes same-year flags, same-programme flags, and year gaps so that same-stage comparisons across programmes can be separated from within-programme longitudinal comparisons.
-
-One implementation detail should be noted explicitly. The overlap ``matrices'' are exported as long-format pair tables rather than wide square CSV matrices, following the same storage logic used earlier for similarity matrices. This keeps the outputs easier to join, filter, and stratify by year or programme in downstream analysis.
+This atlas therefore remains tied to the Step~4 no-merge baseline, but it no longer assumes that every level is sparsified. The current descriptive package should be read as the atlas for the data-driven selected graph family, not as the atlas for a universal sparse-graph rule.

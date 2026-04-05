@@ -1,316 +1,39 @@
-\subsection{Step 8: Representation comparison and selection of the primary graph family}
+\subsection{Step 8: Freeze and Report the Level-wise Selections}
 \label{sec:step8}
 
-Once the pooled-reference sparse graph families have been exported in Step~7, the next task is to select the representation family that will serve as the primary basis for all subsequent analyses. This is a model-selection stage. Its purpose is not yet to interpret curricular differences, but to decide which available representation family yields the most useful and most comparable curriculum graph basis under the pooled-reference sparsification rule.
+Under the corrected workflow, the substantive representation-and-cutoff choice is already complete in Step~7. Step~8 therefore acts only as a freeze-and-report layer. Its purpose is to copy the selected models into a stable downstream record, document that the graph family is indexed by aggregation level, and make that frozen selection explicit for later atlas construction and export.
 
-The representation decision is made at the pooled all-tracks level, not separately within each section, programme, track, or programme-year unit. This is a deliberate design choice. If different analytical units were allowed to select different representation families, then later differences between curricula would be confounded with differences in representation choice. The formal representation decision is therefore made once, in a common pooled reference space, and the lower-level units are used only to audit the consistency of that choice.
-
-Let
-\[
-\mathcal{R}_{\mathrm{spec}}
-=
-\{\texttt{name\_only},\texttt{fusion},\texttt{concat}\}
-\]
-denote the full methodological family set, and let
-\[
-\mathcal{R}_{\mathrm{avail}}
-\subseteq
-\mathcal{R}_{\mathrm{spec}}
-\]
-denote the subset of families actually available in the current run. For each
-\[
-r\in\mathcal{R}_{\mathrm{avail}},
-\]
-Step~7 provides a pooled sparse reference graph
-\[
-H_{\mathrm{all}}^{(r)}
-=
-G_{\mathrm{ref},\tau_r^\ast}^{(r)},
-\]
-together with induced pooled-reference subgraphs at the track, programme, section, and programme-year levels.
-
-\paragraph{(i) Eligibility screen.}
-Before computing the decision scores, each available family is screened for pooled-reference usability. Let
-\[
-\lambda_r
-=
-\frac{|C_1^{(r)}|}{|V^{(\texttt{all\_tracks})}|}
-\]
-denote the largest-connected-component share of the pooled sparse graph \(H_{\mathrm{all}}^{(r)}\), and let
-\[
-\iota_r
-=
-\frac{|I^{(r)}|}{|V^{(\texttt{all\_tracks})}|}
-\]
-denote its isolate share. A family is said to pass the usability screen if
-\[
-\mathrm{Eligible}(r)
-=
-\mathbbm{1}\!\left(
-\lambda_r\ge \lambda_{\min}
-\ \text{and}\
-\iota_r\le \iota_{\max}
-\right)
-=1.
-\]
-Let
-\[
-\mathcal{R}_{\mathrm{elig}}
-=
-\{r\in\mathcal{R}_{\mathrm{avail}}:\mathrm{Eligible}(r)=1\}
-\]
-be the eligible family set. The formal decision set is then
-\[
-\mathcal{R}_{\mathrm{dec}}
-=
-\begin{cases}
-\mathcal{R}_{\mathrm{elig}}, & \text{if } \mathcal{R}_{\mathrm{elig}}\neq\varnothing,\\[4pt]
-\mathcal{R}_{\mathrm{avail}}, & \text{if } \mathcal{R}_{\mathrm{elig}}=\varnothing.
-\end{cases}
-\]
-Thus, if at least one family passes the usability screen, only eligible families are allowed to compete for selection. If none passes, the comparison is still carried out over all available families, but the final choice is explicitly flagged as a fallback decision under globally fragmented pooled graphs.
-
-\paragraph{(ii) Formal pooled decision matrix.}
-The primary representation decision is based on two criteria computed from the pooled Step~7 outputs: \emph{structural adequacy} and \emph{parsimony}. The objective is to select one primary family
-\[
-r^\ast
-\in
-\mathcal{R}_{\mathrm{dec}},
-\]
-while retaining the remaining families as sensitivity families.
-
-\emph{Structural adequacy.}
-A useful curriculum graph should display a clear topological transition, preserve a substantial share of nodes in the retained core, and avoid excessive isolation. For the pooled graph \(H_{\mathrm{all}}^{(r)}\), define
-\[
-\chi_r^\ast
-=
-\chi^{(r)}(\tau_r^\ast),
-\qquad
-\lambda_r
-=
-\frac{|C_1^{(r)}|}{|V^{(\texttt{all\_tracks})}|},
-\qquad
-\nu_r
-=
-\frac{|V^{(\texttt{all\_tracks})}|-|I^{(r)}|}
-{|V^{(\texttt{all\_tracks})}|}.
-\]
-Here \(\chi_r^\ast\) is the peak susceptibility at the selected pooled cutoff, \(\lambda_r\) is the largest-component share, and \(\nu_r\) is the connected-node share.
-
-After min--max normalization across the decision set \(\mathcal{R}_{\mathrm{dec}}\), define
-\[
-q_{\mathrm{struct}}^{(r)}
-=
-\omega_1 \widetilde{\chi}_r^\ast
-+
-\omega_2 \widetilde{\lambda}_r
-+
-\omega_3 \widetilde{\nu}_r,
-\]
-with fixed ex ante weights
-\[
-\omega_1=0.4,\qquad
-\omega_2=0.3,\qquad
-\omega_3=0.3.
-\]
-If a component is constant over all \(r\in\mathcal{R}_{\mathrm{dec}}\), its normalized value is set to \(1\) for all families. This score rewards families that produce a strong topological transition and a more usable pooled post-threshold graph.
-
-\emph{Parsimony.}
-The selected family should also be reasonably sparse after thresholding. Let
-\[
-m_r
-=
-|E(H_{\mathrm{all}}^{(r)})|
-\]
-denote the number of retained pooled edges. Define the normalized inverse retained-edge score
-\[
-\widetilde{\pi}_r
-=
-\frac{\max_{q\in\mathcal{R}_{\mathrm{dec}}} m_q - m_r}
-{\max_{q\in\mathcal{R}_{\mathrm{dec}}} m_q - \min_{q\in\mathcal{R}_{\mathrm{dec}}} m_q},
-\]
-with the convention that \(\widetilde{\pi}_r=1\) if all retained-edge counts are equal. Higher values correspond to greater parsimony.
-
-\paragraph{(iii) Composite pooled score and scenario totals.}
-The main pooled representation score is defined as
-\[
-\mathrm{Score}(r)
-=
-\alpha\, q_{\mathrm{struct}}^{(r)}
-+
-\beta\, \widetilde{\pi}_r,
-\]
-where
-\[
-\alpha,\beta \ge 0,
-\qquad
-\alpha+\beta=1.
-\]
-In the restarted workflow, the ex ante weights are fixed as
-\[
-\alpha=0.75,\qquad
-\beta=0.25.
-\]
-This gives priority to structural usefulness while still rewarding sparsity. The primary representation is then selected as
-\[
-r^\ast
-=
-\arg\max_{r\in\mathcal{R}_{\mathrm{dec}}} \mathrm{Score}(r).
-\]
-
-For transparency, three scenario totals are also reported using the same two pooled criteria but different weightings:
-\[
-\mathrm{Richness}(r)
-=
-0.85\, q_{\mathrm{struct}}^{(r)}
-+
-0.15\, \widetilde{\pi}_r,
-\]
-\[
-\mathrm{Simplicity}(r)
-=
-0.60\, q_{\mathrm{struct}}^{(r)}
-+
-0.40\, \widetilde{\pi}_r,
-\]
-\[
-\mathrm{Balanced}(r)
-=
-0.75\, q_{\mathrm{struct}}^{(r)}
-+
-0.25\, \widetilde{\pi}_r.
-\]
-These scenario totals do not replace the main pooled score. Rather, they document whether the selected family remains preferred under alternative emphases on structural richness versus sparsity. For each family, the following additional summary quantities are retained:
-\[
-\overline{\mathrm{Scenario}}(r)
-=
-\frac{
-\mathrm{Richness}(r)
-+
-\mathrm{Simplicity}(r)
-+
-\mathrm{Balanced}(r)
-}{3},
-\]
-together with the number of scenario wins across the three totals.
-
-\paragraph{(iv) Unit-level consistency audit.}
-Although the formal representation choice is made at the pooled level, it is useful to verify that the selected family also behaves well across lower-level units. This is done through a unit-level consistency audit based on the pooled-reference induced subgraphs from Step~7. Let
-\[
-\mathcal{U}
-=
-\{\texttt{sections},\texttt{tracks},\texttt{programmes},\texttt{programme\_years}\}
-\]
-denote the set of lower-level unit classes, and let \(\mathcal{A}_u\) be the set of analytical units in class \(u\), each represented by its pooled-reference induced graph \(H_A^{(r)}\).
-
-For each unit class \(u\), the audit uses the beneficial metric set
-\[
-\mathcal{M}_{+}
-=
-\{\mathrm{LCC\ share},\mathrm{connected\text{-}node\ share},\mathrm{density}\}
-\]
-and the cost metric set
-\[
-\mathcal{M}_{-}
-=
-\{\mathrm{isolate\ share},\mathrm{component\ count}\}.
-\]
-For a given metric \(m\) and unit class \(u\), define the dominance share of family \(r\) as
-\[
-D_{m,u}^{(r)}
-=
-\frac{1}{|\mathcal{A}_u|}
-\sum_{A\in\mathcal{A}_u}
-\mathbbm{1}\!\left(
-m\!\left(H_A^{(r)}\right)
-=
-\operatorname*{opt}_{q\in\mathcal{R}_{\mathrm{dec}}}
-m\!\left(H_A^{(q)}\right)
-\right),
-\]
-where \(\operatorname*{opt}\) denotes \(\max\) for \(m\in\mathcal{M}_{+}\) and \(\min\) for \(m\in\mathcal{M}_{-}\). Ties at the unit level are allowed and are credited to all tied best families. The overall consistency audit score is then
-\[
-q_{\mathrm{cons}}^{(r)}
-=
-\frac{1}{|\mathcal{U}|\bigl(|\mathcal{M}_{+}|+|\mathcal{M}_{-}|\bigr)}
-\sum_{u\in\mathcal{U}}
-\left(
-\sum_{m\in\mathcal{M}_{+}} D_{m,u}^{(r)}
-+
-\sum_{m\in\mathcal{M}_{-}} D_{m,u}^{(r)}
-\right).
-\]
-
-This audit score is reported as supporting evidence only. It is not part of the formal pooled selection score, because the primary methodological objective is to choose one common representation family for all downstream comparisons, not to allow different unit types to select different representations.
-
-\paragraph{Outputs of the representation-selection step.}
-The outputs of Step~8 are fourfold. First, a formal pooled decision matrix reports, for each family in \(\mathcal{R}_{\mathrm{dec}}\), the selected cutoff, peak susceptibility, largest-component share, connected-node share, isolate share, retained pooled edges, structural score, parsimony score, composite pooled score, eligibility flag, and final rank. Second, a scenario table reports the richness, simplicity, and balanced totals together with average scenario score and scenario-win count. Third, a unit-level consistency table reports the lower-level audit results by unit class. Fourth, a one-row selection record freezes the primary family \(r^\ast\).
-
-The output of this step is therefore a frozen primary graph family
-\[
-\mathcal{H}^{(r^\ast)}
-=
-\Bigl\{
-H_{\mathrm{all}}^{(r^\ast)},
-H_t^{(r^\ast)},
-H_p^{(r^\ast)},
-H_{p,y}^{(r^\ast)}
-\Bigr\},
-\]
-which will be used for the main descriptive, topological, and comparison-oriented analyses in the subsequent stages. The remaining available families are retained as sensitivity families. Importantly, this decision pertains to the representation layer only: both weighted and binary versions of the selected graph family are preserved for later analysis under the same chosen representation.
+The direct input is \texttt{07\_levelwise\_selected\_models.csv}. Unlike earlier versions of the workflow, Step~8 does not run a second composite selector. The full candidate surface remains in Step~7, and Step~8 simply records the winning row for each level.
 
 \subsubsection{Outputs of this Step}
 \label{sec:step8_outputs}
 
-The implemented Step~8 writes its selection outputs under \texttt{outputs/representation\_selection}. The current file set is:
+The current Step~8 produces:
 \begin{itemize}
-    \item \texttt{08\_representation\_decision\_matrix.csv}
-    \item \texttt{08\_representation\_scenarios.csv}
-    \item \texttt{08\_unit\_level\_consistency\_audit.csv}
+    \item \texttt{08\_levelwise\_alternatives.csv}
     \item \texttt{08\_primary\_representation\_selection.csv}
-    \item \texttt{08\_representation\_selection\_decision\_log.csv}
+    \item \texttt{08\_levelwise\_selection\_report.csv}
+    \item \texttt{08\_selection\_freeze\_log.csv}
 \end{itemize}
-
-The decision-matrix table contains one row per family in the formal decision set \(\mathcal{R}_{\mathrm{dec}}\). The scenario table contains the three transparency totals and their summary statistics. The consistency-audit table reports unit-class dominance shares for the pooled-reference induced subgraphs together with an overall consistency row for each family. The one-row selection table freezes the primary representation family used in later steps.
 
 \subsubsection{Implementation Note and Current Run}
 \label{sec:step8_implementation_note}
 
-The current Step~8 implementation uses the available family set
-\[
-\mathcal{R}_{\mathrm{avail}}
-=
-\{\texttt{name\_only},\texttt{concat}\},
-\]
-with \texttt{concat} supplied from the Step~6 source representation \texttt{name\_description}. The family \texttt{fusion} is not available in the current run.
-
-Under the pooled usability screen inherited from Step~7, neither available family is eligible:
+The current run freezes five level-wise selections:
 \begin{itemize}
-    \item \texttt{name\_only}: \(\lambda_r = 0.0791\), \(\iota_r = 0.4812\)
-    \item \texttt{concat}: \(\lambda_r = 0.2681\), \(\iota_r = 0.2534\)
-\end{itemize}
-Since both families fail the \((\lambda_{\min},\iota_{\max})\) screen, the current run is explicitly a fallback selection over all available families.
-
-The formal pooled decision matrix in the current run yields:
-\begin{itemize}
-    \item \texttt{concat}: structural score \(= 1.0000\), parsimony score \(= 0.0000\), composite score \(= 0.7500\), final rank \(= 1\)
-    \item \texttt{name\_only}: structural score \(= 0.0000\), parsimony score \(= 1.0000\), composite score \(= 0.2500\), final rank \(= 2\)
+    \item pooled: \texttt{name\_only}, threshold 0.814399, \texttt{thresholded\_sparse};
+    \item track: \texttt{name\_only}, threshold 0.819634, \texttt{full\_weighted\_graph};
+    \item section: \texttt{name\_only}, threshold 0.831524, \texttt{full\_weighted\_graph};
+    \item programme: \texttt{concat}, threshold 0.879671, \texttt{full\_weighted\_graph};
+    \item programme-year: \texttt{concat}, threshold 0.790938, \texttt{full\_weighted\_graph}.
 \end{itemize}
 
-The scenario table is fully concordant in the current run:
+The freeze log records that:
 \begin{itemize}
-    \item \texttt{concat}: richness \(= 0.85\), simplicity \(= 0.60\), balanced \(= 0.75\), scenario wins \(= 3\)
-    \item \texttt{name\_only}: richness \(= 0.15\), simplicity \(= 0.40\), balanced \(= 0.25\), scenario wins \(= 0\)
+    \item Step~8 is \texttt{freeze\_and\_report\_only};
+    \item the selection scope is level-wise rather than global;
+    \item the selection source is \texttt{07\_levelwise\_selected\_models.csv};
+    \item the full candidate surface remains in Step~7 rather than being duplicated in Step~8.
 \end{itemize}
 
-The unit-level consistency audit also strongly favors \texttt{concat}. Its overall audit score is \(0.9985\), compared with \(0.0548\) for \texttt{name\_only}. In the current pooled-reference induced graphs, \texttt{concat} dominates all five audit metrics across sections and tracks, all five across programmes, and all but the largest-component-share criterion across programme-year units.
-
-The resulting frozen primary representation record in the current run is therefore:
-\begin{itemize}
-    \item \texttt{selected\_representation\_family = concat}
-    \item \texttt{selected\_source\_representation = name\_description}
-    \item \texttt{fallback\_decision = TRUE}
-    \item \texttt{sensitivity\_families = name\_only}
-\end{itemize}
-
-This means that all subsequent mainline analyses should use the \texttt{concat} graph family exported from Step~7, while \texttt{name\_only} is retained only as a sensitivity family.
+This means the downstream descriptive atlas and final export package should be interpreted as a mixed level-wise graph family, not as one universal representation-cutoff rule applied everywhere.
