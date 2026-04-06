@@ -1,0 +1,262 @@
+\subsection{Directed dependency graph: step-by-step workflow}
+\label{sec:directed_dependency_stepwise}
+
+The directed dependency graph is treated as a separate branch from the undirected
+semantic-similarity graph. The reason is simple: a prerequisite relation must respect
+curricular time, whereas the current undirected workflow collapses repeated occurrences of the
+same harmonized skill into one node within an analytical unit. For the directed branch, the
+primary substantive object is the local trajectory DAG, while higher-level graphs are treated as
+aggregate support summaries.
+
+\paragraph{Fixed design rules.}
+\begin{itemize}
+    \item A node may point only to a node that appears later in the same trajectory.
+    \item A skill in year $1$ cannot depend on a skill in year $2$ of the same trajectory.
+    \item Same-year, same-class pairs are not directed unless a validated within-year ordering
+    variable exists.
+    \item Dependencies are learned globally across trajectories, but exported locally as one graph
+    per trajectory unit.
+\end{itemize}
+
+\begin{enumerate}
+
+    \item \textbf{Step D1: Build the ordered trajectory table.}
+
+    \textit{Input.} The harmonized occurrence-level dataset.
+
+    \textit{Action.} Assign each occurrence to exactly one ordered curricular path
+    \texttt{trajectory\_unit}. The default rule is:
+    \[
+    \texttt{trajectory\_unit}
+    =
+    \begin{cases}
+    \texttt{programme} \times \texttt{section}, & \text{if section defines a distinct path},\\
+    \texttt{programme}, & \text{otherwise.}
+    \end{cases}
+    \]
+    Retain, at minimum:
+    \texttt{trajectory\_unit}, \texttt{year}, \texttt{harmonized\_skill\_id},
+    \texttt{occurrence\_id}, and \texttt{class\_id} if available.
+
+    \textit{Expected outcome.} Every occurrence has one valid trajectory assignment and one valid
+    time position.
+
+    \textit{Main outputs.}
+    \texttt{10\_directed\_trajectory\_panel.csv},
+    \texttt{10\_directed\_trajectory\_audit.csv}.
+
+    \item \textbf{Step D2: Create time-layered nodes.}
+
+    \textit{Input.} The ordered trajectory table from Step D1.
+
+    \textit{Action.} Define the directed-graph node as
+    \[
+    v = (\texttt{trajectory\_unit}, \texttt{year}, \texttt{harmonized\_skill\_id}).
+    \]
+    If a validated within-year position variable exists, refine the node definition to
+    \[
+    v = (\texttt{trajectory\_unit}, \texttt{year}, \texttt{position},
+    \texttt{harmonized\_skill\_id}).
+    \]
+    Collapse repeated occurrences only within the same time slice. Do \emph{not} collapse the same
+    skill across different years.
+
+    \textit{Expected outcome.} The same skill may appear as different nodes in different years,
+    which preserves the temporal structure required for a prerequisite graph.
+
+    \textit{Main outputs.}
+    \texttt{11\_directed\_nodes.csv},
+    \texttt{11\_directed\_node\_provenance.csv}.
+
+    \item \textbf{Step D3: Split temporally admissible pairs from same-time pairs.}
+
+    \textit{Input.} The time-layered node table from Step D2.
+
+    \textit{Action.} For each pair of nodes within the same trajectory, classify the relation as:
+    \begin{itemize}
+        \item earlier-to-later;
+        \item same year and same class;
+        \item same year and different class;
+        \item reverse-time impossible.
+    \end{itemize}
+    Only earlier-to-later pairs enter the prerequisite candidate set.
+    Same-time pairs are routed to a separate co-requisite layer.
+    Reverse-time pairs are excluded.
+    If a validated within-year order variable exists, same-year pairs may be reclassified into
+    earlier-to-later within the year.
+
+    \textit{Expected outcome.} The directed branch contains only temporally admissible candidate
+    edges, while same-time relations are preserved without being forced into arbitrary direction.
+
+    \textit{Main outputs.}
+    \texttt{12\_prerequisite\_candidates.csv},
+    \texttt{12\_corequisite\_candidates.csv}.
+
+    \item \textbf{Step D4: Compute global temporal precedence evidence.}
+
+    \textit{Input.} The ordered trajectory table from Step D1.
+
+    \textit{Action.} For each skill $s$ in trajectory $u$, define its first appearance year:
+    \[
+    T_u(s) = \min\{y : s \text{ appears in trajectory } u \text{ in year } y\}.
+    \]
+    For each skill pair $(i,j)$, compute:
+    \[
+    n^+_{ij} = \#\{u : T_u(i) < T_u(j)\}, \qquad
+    n^-_{ij} = \#\{u : T_u(i) > T_u(j)\}, \qquad
+    n^0_{ij} = \#\{u : T_u(i) = T_u(j)\}.
+    \]
+    Also compute the precedence score:
+    \[
+    \mathrm{Prec}_{ij}
+    =
+    \frac{n^+_{ij} - n^-_{ij}}{n^+_{ij} + n^-_{ij} + n^0_{ij}}.
+    \]
+
+    \textit{Expected outcome.} A global evidence table shows whether a skill tends to appear
+    before another skill, after it, or at the same time.
+
+    \textit{Main outputs.}
+    \texttt{13\_precedence\_statistics.csv}.
+
+    \item \textbf{Step D5: Build the learning sample for direct parent estimation.}
+
+    \textit{Input.} The trajectory table from Step D1 and the precedence table from Step D4.
+
+    \textit{Action.} For each child skill $j$, each trajectory $u$, and each year $y$, define:
+    \[
+    Y_{u,y,j}
+    =
+    \mathbf{1}\{\text{skill } j \text{ first appears in year } y+1\},
+    \]
+    and for each candidate parent skill $i$:
+    \[
+    X_{u,y,i}
+    =
+    \mathbf{1}\{\text{skill } i \text{ has appeared by year } y\}.
+    \]
+    Restrict candidate parents to skills that are temporally admissible for $j$.
+    If semantic information is used in the directed branch, estimate parallel candidate sets under
+    each representation
+    \[
+    r \in \{\texttt{name\_only}, \texttt{concat}\}.
+    \]
+
+    \textit{Expected outcome.} Each child skill receives a tractable prediction sample for
+    estimating its direct parents rather than all earlier skills indiscriminately.
+
+    \textit{Main outputs.}
+    \texttt{14\_dependency\_learning\_sample.csv},
+    \texttt{14\_candidate\_parent\_sets.csv}.
+
+    \item \textbf{Step D6: Estimate direct parents with sparse conditional models.}
+
+    \textit{Input.} The learning sample from Step D5.
+
+    \textit{Action.} For each child skill $j$, fit a sparse conditional model predicting first
+    appearance from previously observed skills. A practical choice is a sparse logistic model or
+    a discrete-time hazard model. Repeat this estimation across bootstrap resamples of trajectory
+    units and record the edge-selection frequency:
+    \[
+    q_{ij}
+    =
+    \frac{1}{B}
+    \sum_{b=1}^{B}
+    \mathbf{1}\{i \rightarrow j \text{ selected in bootstrap } b\}.
+    \]
+    When semantic representations are being compared, compute $q_{ij}^{(r)}$ separately for each
+    representation $r$.
+
+    \textit{Expected outcome.} Each admissible edge receives an empirical support probability
+    instead of a hand-made yes/no decision.
+
+    \textit{Main outputs.}
+    \texttt{15\_direct\_parent\_scores.csv},
+    \texttt{15\_bootstrap\_selection\_summary.csv}.
+
+    \item \textbf{Step D7: Select the graph rule automatically.}
+
+    \textit{Input.} The bootstrap edge-support scores from Step D6.
+
+    \textit{Action.} For each candidate edge-support cutoff $\tau$, evaluate held-out prediction of
+    first-introduction events. If semantic representations are being compared, select jointly:
+    \[
+    (r^*, \tau^*)
+    =
+    \arg\max_{r,\tau}
+    \mathrm{CVSkill}(r,\tau).
+    \]
+    If no representation comparison is used, select only
+    \[
+    \tau^*
+    =
+    \arg\max_{\tau}
+    \mathrm{CVSkill}(\tau).
+    \]
+    If no thresholded graph outperforms the null model, do not force a binary graph; retain the
+    weighted directed graph with edge weights $q_{ij}$.
+
+    \textit{Expected outcome.} The representation choice and the cutoff choice are made
+    automatically from predictive performance rather than from hand-set topology rules.
+
+    \textit{Main outputs.}
+    \texttt{16\_directed\_selection\_surface.csv},
+    \texttt{16\_directed\_selected\_model.csv}.
+
+    \item \textbf{Step D8: Instantiate one local DAG per trajectory unit.}
+
+    \textit{Input.} The selected model from Step D7 and the time-layered nodes from Step D2.
+
+    \textit{Action.} For each trajectory unit $u$, include a directed edge $i \rightarrow j$ when:
+    \begin{enumerate}
+        \item the edge is selected by the global rule;
+        \item both nodes are present in trajectory $u$;
+        \item the temporal order in $u$ is valid.
+    \end{enumerate}
+    Then apply transitive reduction within each local DAG so that redundant edges are removed.
+    Export same-time relations separately as co-requisite edges.
+
+    \textit{Expected outcome.} Each trajectory unit has one interpretable local prerequisite DAG,
+    plus an optional same-time co-requisite layer.
+
+    \textit{Main outputs.}
+    \texttt{17\_directed\_edges\_trajectories.csv},
+    \texttt{17\_corequisite\_edges\_trajectories.csv},
+    \texttt{17\_directed\_graph\_summary.csv}.
+
+    \item \textbf{Step D9: Aggregate local DAGs upward for comparison.}
+
+    \textit{Input.} The local trajectory DAGs from Step D8.
+
+    \textit{Action.} Aggregate the local graphs into higher-level directional support graphs for
+    sections, tracks, programmes, and pooled. For each aggregated edge $i \rightarrow j$, report
+    summary support measures such as:
+    \begin{itemize}
+        \item frequency across local trajectories;
+        \item mean support probability $\bar q_{ij}$;
+        \item inclusion rate across local units.
+    \end{itemize}
+    Local trajectory graphs remain strict DAGs. Aggregated higher-level graphs may contain cycles,
+    because they summarize heterogeneous local pathways.
+
+    \textit{Expected outcome.} Higher-level directed graphs become comparable because they all
+    inherit the same globally learned dependency rule.
+
+    \textit{Main outputs.}
+    \texttt{18\_directed\_edges\_sections.csv},
+    \texttt{18\_directed\_edges\_tracks.csv},
+    \texttt{18\_directed\_edges\_programmes.csv},
+    \texttt{18\_directed\_edges\_pooled.csv},
+    \texttt{18\_directed\_aggregation\_summary.csv}.
+
+\end{enumerate}
+
+\paragraph{Minimal interpretation rules.}
+\begin{itemize}
+    \item The main substantive graph is the local trajectory DAG, not the pooled graph.
+    \item The pooled graph is a summary of directional support across local trajectories.
+    \item Same-year, same-class pairs belong to the co-requisite layer unless a validated
+    within-year order variable exists.
+    \item Direction is determined by temporal admissibility and predictive support, not by
+    semantic similarity alone.
+\end{itemize}
