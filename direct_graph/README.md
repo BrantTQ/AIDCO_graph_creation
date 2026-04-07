@@ -15,7 +15,9 @@ Current implementation status:
 - Step D4 implemented in `scripts/step13_precedence_statistics.py`
 - Step D5 implemented in `scripts/step14_dependency_learning_sample.py`
 - Step D6 implemented in `scripts/step15_direct_parent_scores.py`
-- Steps D7 onward still pending
+- Step D7 implemented in `scripts/step16_directed_selection_rule.py`
+- Step D8 implemented in `scripts/step17_local_directed_graphs.py`
+- Step D9 implemented in `scripts/step18_directed_aggregation.py`
 
 The directed branch is now Python-only.
 
@@ -42,6 +44,18 @@ The directed-branch CSV outputs are written to:
 - `outputs/directed_graph/14_dependency_learning_sample.csv`
 - `outputs/directed_graph/15_direct_parent_scores.csv`
 - `outputs/directed_graph/15_bootstrap_selection_summary.csv`
+- `outputs/directed_graph/16_directed_selection_surface.csv`
+- `outputs/directed_graph/16_directed_selected_model.csv`
+- `outputs/directed_graph/16_directed_model_selection_surface.csv`
+- `outputs/directed_graph/16_directed_cutoff_selection.csv`
+- `outputs/directed_graph/17_directed_edges_trajectories.csv`
+- `outputs/directed_graph/17_corequisite_edges_trajectories.csv`
+- `outputs/directed_graph/17_directed_graph_summary.csv`
+- `outputs/directed_graph/18_directed_edges_sections.csv`
+- `outputs/directed_graph/18_directed_edges_tracks.csv`
+- `outputs/directed_graph/18_directed_edges_programmes.csv`
+- `outputs/directed_graph/18_directed_edges_pooled.csv`
+- `outputs/directed_graph/18_directed_aggregation_summary.csv`
 
 ## How to run
 
@@ -54,6 +68,9 @@ py .\scripts\step12_temporal_pair_classification.py
 py .\scripts\step13_precedence_statistics.py
 py .\scripts\step14_dependency_learning_sample.py
 py .\scripts\step15_direct_parent_scores.py
+py .\scripts\step16_directed_selection_rule.py
+py .\scripts\step17_local_directed_graphs.py
+py .\scripts\step18_directed_aggregation.py
 ```
 
 ## D1 implementation notes
@@ -207,6 +224,113 @@ which estimates how often an admissible edge survives the bootstrap sparse-selec
 
 This is a practical prototype baseline for D6. The main future upgrade path is to replace the screening-based sparse selector with a true penalized discrete-time hazard or sparse logistic estimator while keeping the same output contract.
 
-## Next recommended step
+## D7 implementation notes
 
-Step D7 can now evaluate candidate cutoffs on `bootstrap_selection_frequency` and decide whether to keep a weighted directed graph or threshold it into a binary local-DAG rule.
+Step D7 uses the D6 bootstrap support scores and evaluates candidate thresholds on held-out trajectories.
+
+The current evaluation rule is:
+
+- leave one trajectory unit out at a time
+- build child-specific smoothed baseline event rates on the remaining trajectories
+- for each threshold `tau`, keep edges with `bootstrap_selection_frequency >= tau`
+- score held-out first-introduction events with the strongest active selected parent for that child-year risk set
+- choose the threshold that maximizes held-out log-loss improvement over the null child-rate baseline
+
+That produces:
+
+- `16_directed_selection_surface.csv`
+- `16_directed_selected_model.csv`
+
+To stay compatible with both `steps.tex` and `manisfest.tex`, the same D7 content is also exported under the alias filenames:
+
+- `16_directed_model_selection_surface.csv`
+- `16_directed_cutoff_selection.csv`
+
+In the current run, D7 selected a thresholded binary rule at `tau = 0.64`.
+
+## D8 implementation notes
+
+Step D8 instantiates one local directed graph per trajectory from the D7-selected global rule.
+
+The important implementation choice is that the prerequisite DAG is instantiated on first-introduction nodes. That is an inference from the earlier branch design:
+
+- D2 keeps all time-layered nodes
+- D5 to D7 learn on first-introduction events
+- therefore the substantive local DAG layer is built on the earliest node for each skill in each trajectory
+
+For each trajectory:
+
+- a directed edge is added when the global skill edge is selected, both skills are present, and the parent's first-introduction year is strictly earlier than the child's
+- transitive reduction is applied to remove redundant prerequisite edges
+- same-time first-introduction pairs are exported separately as the co-requisite layer
+
+This yields:
+
+- `17_directed_edges_trajectories.csv`
+- `17_corequisite_edges_trajectories.csv`
+- `17_directed_graph_summary.csv`
+
+## D9 implementation notes
+
+Step D9 aggregates the reduced local D8 prerequisite DAGs into higher-level directional support graphs for:
+
+- sections
+- tracks
+- programmes
+- pooled
+
+That produces:
+
+- `18_directed_edges_sections.csv`
+- `18_directed_edges_tracks.csv`
+- `18_directed_edges_programmes.csv`
+- `18_directed_edges_pooled.csv`
+- `18_directed_aggregation_summary.csv`
+
+The aggregation metrics exported for each edge are:
+
+- frequency across local trajectories
+- mean support probability `q`
+- inclusion rate across local units
+
+The current implementation also adds two opportunity-set diagnostics so the aggregate support can be interpreted more carefully:
+
+- `n_local_trajectories_with_both_skills`
+- `n_local_trajectories_temporally_admissible`
+
+This makes it possible to separate:
+
+- low support because the edge rarely appears
+- low support because the two skills rarely co-occur
+- low support because temporal admissibility itself is rare
+
+The main design inference in D9 concerns section aggregation. Local graphs are trajectory-based, but the raw `section` field can change across years within a trajectory. The current reproducible rule is therefore:
+
+- a trajectory contributes to a section aggregate if the trajectory passes through that section anywhere in the D1 panel
+
+That rule is exported explicitly as:
+
+- `aggregation_membership_rule = trajectory_contains_section_anywhere`
+
+Track, programme, and pooled aggregation use exact trajectory membership:
+
+- `trajectory_edu_type_exact_match`
+- `trajectory_programme_exact_match`
+- `all_trajectory_units`
+
+Because D9 summarizes local DAG families, the aggregated graphs should be interpreted as directional support graphs. They are not required to remain strict DAGs, even though the underlying local trajectory graphs are acyclic.
+
+## Current directed branch status
+
+The directed branch is now implemented through D9:
+
+- D1 to D4 build temporal admissibility and precedence evidence
+- D5 to D7 learn and select the global directed rule
+- D8 instantiates local first-introduction prerequisite DAGs
+- D9 aggregates those local DAGs upward for comparison
+
+The next practical step is no longer another construction step from `steps.tex`. The best next move is to either:
+
+- review and commit the D7 to D9 outputs
+- add exporter/viewer payloads for the directed graphs
+- or revisit the section aggregation rule if you want a stricter year-aware section interpretation
